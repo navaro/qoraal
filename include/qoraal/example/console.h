@@ -54,6 +54,12 @@ extern "C" {
     extern int32_t      console_service_run (uintptr_t arg) ;
     extern void         console_wait_for_exit (SVC_SERVICES_T  id) ;
 
+    /*
+     * To be implemeted by for the platform
+     */
+    extern int         console_getchar (void) ; 
+    extern void        console_putchar (char character) ; 
+
 #ifdef __cplusplus
 }
 #endif

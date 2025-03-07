@@ -1007,9 +1007,13 @@ os_sys_halt (const char * msg)
 uint32_t
 os_sys_is_irq (void)
 {
+#if defined CFG_OS_FREERTOS && CFG_OS_FREERTOS
+    return xPortIsInsideInterrupt() ? 1 : 0 ;
+#else
     uint32_t isr;
     __asm volatile ( "mrs %0, ipsr" : "=r" ( isr )::"memory" );
     return isr ;
+#endif
 } 
 
 #if !defined CFG_OS_MUTEX_DISABLE

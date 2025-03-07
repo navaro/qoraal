@@ -17,6 +17,13 @@ add_subdirectory(src)
 # Option to build tests
 option(BUILD_TESTS "Build the test directory" OFF)
 
+# Add the library target
+add_library(qoraal STATIC ${QORAAL_SRCS})
+
+# Link necessary libraries
+target_link_libraries(qoraal pthread)
+
+
 if(BUILD_TESTS)
     add_subdirectory(test)
 endif()

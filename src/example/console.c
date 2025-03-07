@@ -17,7 +17,7 @@
  *  This file is part of CORAL Connect (https://navaro.nl)
  */
 
-#if defined CFG_OS_POSIX
+#if 1
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -51,7 +51,9 @@ SVC_SHELL_CMD_DECL("exit", qshell_cmd_exit, "");
 SVC_SHELL_CMD_DECL("version", qshell_cmd_version, "");
 SVC_SHELL_CMD_DECL("hello", qshell_cmd_hello, "");
 
+#if defined CFG_OS_POSIX && CFG_OS_POSIX
 extern void keep_posixcmds (void) ;
+#endif
 
 /*===========================================================================*/
 /* Service Local Variables and Types                                         */
@@ -84,7 +86,9 @@ console_service_ctrl (uint32_t code, uintptr_t arg)
 
     switch (code) {
     case SVC_SERVICE_CTRL_INIT:
+#if defined CFG_OS_POSIX && CFG_OS_POSIX    
         keep_posixcmds () ;
+#endif        
         _console_service_id = svc_service_service ((SCV_SERVICE_HANDLE) arg ) ;
         break ;
 
@@ -133,10 +137,14 @@ console_service_run (uintptr_t arg)
     svc_shell_script_run (&qshell_cmd_if, "", "hello", strlen("hello")) ;
     do {
         char line[1024];
-        printf (SHELL_PROMPT) ;
+        printf ("\r" SHELL_PROMPT) ;
         int len = console_get_line (line, sizeof(line)) ;
+        if (line[len-1] == '\r') console_putchar('\n') ;
+        while (len && isspace((int)line[len-1])) len-- ;
         if (!_shell_exit && len > 0) {
             svc_shell_script_run (&qshell_cmd_if, "", line, len) ;
+        	console_putchar('\r') ;
+        	for (int i=0; i<60; i++) console_putchar(' ') ;
             
         }
 
@@ -156,15 +164,14 @@ console_service_run (uintptr_t arg)
  *
  * @return      status  The result of the operation.
  */
-int32_t
-console_out (void* ctx, uint32_t out, const char* str)
-{
+int32_t console_out(void* ctx, uint32_t out, const char* str) {
     if (str && (out && out < SVC_SHELL_IN_STD)) {
-        printf ("%s", str) ;
-
+        while (*str) {
+            console_putchar(*str++);
+        }
     }
-
-    return  SVC_SHELL_CMD_E_OK ;
+    
+    return SVC_SHELL_CMD_E_OK;
 }
 
 /**
@@ -179,21 +186,25 @@ console_out (void* ctx, uint32_t out, const char* str)
 int32_t
 console_get_line (char * buffer, uint32_t len)
 {
-    uint32_t i = 0 ;
+    int i = 0 ;
 
     for (i=0; i<len; i++) {
-        int c = getc(stdin);
+        int c = console_getchar();
 
         if (_shell_exit) break;
 
         if (c == EOF) {
             // If EOF is due to `/dev/null`, prevent infinite loop
             os_thread_sleep (1000);
+            i--;
             continue;
         }
 
-        if (c == '\n') break;
+        console_putchar (c) ;
+        if (c == '\r') c = '\n' ;
         buffer[i] = (char)c;
+        if (c == '\r') break;
+        if (c == '\n') break ;
 
     }
 
@@ -212,7 +223,21 @@ console_get_line (char * buffer, uint32_t len)
 void
 console_logger_cb (void* channel, LOGGERT_TYPE_T type, uint8_t facility, const char* msg)
 {
-    printf("--- %s\n", msg) ;
+    const char * header = "--- ";
+    while (*header) {
+        console_putchar(*header++);
+    }
+    
+    const char *ptr = msg;
+    while (*ptr) {
+        console_putchar(*ptr++);
+    }
+    
+    // Check if the message ends with \r\n, if not, add it
+    if ((ptr == msg || *(ptr - 1) != '\n') || (ptr - 1 == msg || *(ptr - 2) != '\r')) {
+        console_putchar('\r');
+        console_putchar('\n');
+    }
 }
 
 typedef struct {

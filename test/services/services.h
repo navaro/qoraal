@@ -18,8 +18,8 @@
  */
 
 
-#ifndef __MAIN_H__
-#define __MAIN_H__
+#ifndef __SERVICES_H__
+#define __SERVICES_H__
 
 #include "qoraal/svc/svc_services.h"
 
@@ -58,4 +58,4 @@ extern "C" {
 }
 #endif
 
-#endif /* __MAIN_H__ */
+#endif /* __SERVICES_H__ */

@@ -1,3 +1,6 @@
+# Minimum CMake version (match your project’s requirement)
+cmake_minimum_required(VERSION 3.15)
+
 # Collect all source files
 set(QORAAL_SRCS
     qoraal.c
@@ -25,12 +28,18 @@ set(QORAAL_SRCS
     qshell/servicescmd.c
 )
 
-# Add the library target
+
+# Create a static library target named 'qoraal'
 add_library(qoraal STATIC ${QORAAL_SRCS})
 
-# Link necessary libraries
-target_link_libraries(qoraal pthread)
+# Set compile-time definition CFG_OS_FREERTOS for the qoraal target
+target_compile_definitions(qoraal PRIVATE CFG_OS_FREERTOS)
 
-# Set compile-time definitions for the qoraal target
-# target_compile_definitions(qoraal PRIVATE CFG_OS_POSIX)
+# Optional: Set include directories for the library if needed
+target_include_directories(qoraal PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Add ../include as a PUBLIC include directory
+target_include_directories(qoraal PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+
+# Inherit project-wide includes from sdk_intf_lib
+target_link_libraries(qoraal PUBLIC sdk_intf_lib)
