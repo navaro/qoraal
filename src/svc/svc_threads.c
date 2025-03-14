@@ -79,7 +79,7 @@ svc_threads_start (void)
     int32_t res ;
 
 #if !defined CFG_SVC_THREADS_DISABLE_IDLE
-    res = os_thread_create (1024, OS_THREAD_PRIO_LOWEST, svc_threads_idle,
+    res = os_thread_create (1024, OS_HEAP_AUX, OS_THREAD_PRIO_LOWEST, svc_threads_idle,
                             0, &_svc_threads_idle, "svc_threads_idle") ;
 #else
     res = EOK ;
@@ -124,7 +124,7 @@ svc_threads_create (SVC_THREADS_T* thread, SVC_THREADS_COMPLETE_CALLBACK_T compl
     thread->pf = pf ;
 
     if (os_sys_started()) os_mutex_lock(&_svc_threads_mutex) ;
-    res = os_thread_create (stack_size, prio, svc_thread_start,
+    res = os_thread_create (stack_size, OS_HEAP_AUX, prio, svc_thread_start,
                             thread, &thread->thread, name) ;
 
     if (res == EOK) {

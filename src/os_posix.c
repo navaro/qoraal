@@ -158,7 +158,7 @@ map_posix_to_custom_priority (int posix_priority)
 }
 
 int32_t
-os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
+os_thread_create (uint16_t stack_size, uint16_t heap, uint32_t prio, p_thread_function_t pf,
                    void *arg, p_thread_t* thread,  const char* name)
 {
 	pthread_attr_t tattr;
@@ -177,7 +177,7 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
     }
 
     /* We'll allocate the wrapper struct. */
-        OS_THREAD_WA_T * const wa = qoraal_malloc (QORAAL_HeapOperatingSystem, sizeof(OS_THREAD_WA_T));
+        OS_THREAD_WA_T * const wa = qoraal_malloc (heap ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, sizeof(OS_THREAD_WA_T));
         if (!wa) {
             return E_NOMEM ;
         }
@@ -185,10 +185,10 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
 
         wa->pf  = pf ;
         wa->arg = arg ;
-        wa->heap = 1 ;
+        wa->heap = heap + 1 ;
 
         if (sem_init(&wa->join_sem, 0, 0) != 0) {
-            qoraal_free (QORAAL_HeapOperatingSystem, wa);
+            qoraal_free (heap ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, wa);
             return EFAIL;
         }
 
@@ -207,7 +207,7 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
 
     if (ret != 0) {
         sem_destroy(&wa->join_sem);
-        qoraal_free(QORAAL_HeapOperatingSystem, wa);
+        qoraal_free(heap ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, wa);
         return EFAIL;
     }
 
@@ -360,7 +360,7 @@ os_thread_release (p_thread_t* thread)
 
     // Free memory if we allocated it
     if (wa->heap) {
-        qoraal_free(QORAAL_HeapOperatingSystem, wa);
+        qoraal_free((wa->heap - 1) ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, wa);
     }
     
     *thread = NULL;

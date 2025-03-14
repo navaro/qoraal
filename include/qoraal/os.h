@@ -41,6 +41,14 @@
 /*===========================================================================*/
 
 /**
+* @brief   Heap selection.
+*/
+#define OS_HEAP_OS                   (0)
+#define OS_HEAP_AUX                  (1)
+
+
+
+/**
 * @brief   Thread priorities.
 */
 #define OS_THREAD_PRIO_LOWEST                   (8*1)
@@ -174,7 +182,7 @@ extern "C" {
     extern void         os_sys_stop (void) ;
     extern void         os_sys_halt (const char * msg) ;
 
-    extern int32_t      os_thread_create  (uint16_t stack_size, uint32_t prio, p_thread_function_t pf, void *arg, p_thread_t* thread, const char* name) ;
+    extern int32_t      os_thread_create  (uint16_t stack_size, uint16_t heap, uint32_t prio, p_thread_function_t pf, void *arg, p_thread_t* thread, const char* name) ;
     extern int32_t      os_thread_create_static (void *wsp, uint16_t size, uint32_t prio, p_thread_function_t pf, void *arg, p_thread_t* thread, const char* name) ;
     extern const char*  os_thread_get_name (p_thread_t* thread);
     extern p_thread_t   os_thread_current (void) ;

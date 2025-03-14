@@ -205,7 +205,7 @@ svc_tasks_start (void)
 
     for (i=0; i<_svc_tasks_pool_count; i++) {
         os_event_clear (&_svc_tasks_complete_event, 1<<i) ;
-        int32_t res = os_thread_create (_svc_tasks_pool.pool[i].stack, _svc_tasks_pool.pool[i].prio,
+        int32_t res = os_thread_create (_svc_tasks_pool.pool[i].stack, OS_HEAP_AUX, _svc_tasks_pool.pool[i].prio,
         		svc_tasks_thread, (void*)i, &_svc_task_threads[i], _svc_tasks_pool.pool[i].name) ;
         if (res != EOK) {
             DBG_MESSAGE_SVC_TASKS (DBG_MESSAGE_SEVERITY_ASSERT,

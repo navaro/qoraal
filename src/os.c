@@ -135,7 +135,7 @@ task_start (unsigned long arg)
 #endif
 
 int32_t
-os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
+os_thread_create (uint16_t stack_size, uint16_t heap, uint32_t prio, p_thread_function_t pf,
                    void *arg, p_thread_t* thread,
                    const char* name)
 {
@@ -147,7 +147,7 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
 
     if (thread) *thread = 0 ;
 
-    wsp = qoraal_malloc (QORAAL_HeapOperatingSystem, size) ;
+    wsp = qoraal_malloc (heap ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, size) ;
     if (wsp == 0)
         return E_NOMEM;
 
@@ -171,7 +171,7 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
     tp->flags = 0 ; //CH_FLAG_MODE_HEAP;
 
     tp->wa = wsp ;
-    tp->heap = 1  ;
+    tp->heap = heap + 1  ;
 
     chSchWakeupS (tp, MSG_OK);
     chSysUnlock ();
@@ -183,14 +183,14 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
     size_t size = stack_size  ;
 
     if (thread) *thread = 0 ;
-    OS_THREAD_WA_T * const wa = qoraal_malloc (QORAAL_HeapOperatingSystem, size  + sizeof(OS_THREAD_WA_T));
+    OS_THREAD_WA_T * const wa = qoraal_malloc (heap ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, size  + sizeof(OS_THREAD_WA_T));
     if (!wa) {
         return E_NOMEM ;
     }
 
     wa->pf  = pf ;
     wa->arg = arg ;
-    wa->heap = 1 ;
+    wa->heap = heap + 1 ;
     xSemaphoreCreateCountingStatic ((UBaseType_t)-1, 0, (StaticSemaphore_t *)(&wa->join_sem)) ;
     xSemaphoreCreateCountingStatic ((UBaseType_t)-1, 0, (StaticSemaphore_t *)(&wa->thread_sem)) ;
     wa->pthread_sem = &wa->thread_sem ;
@@ -204,7 +204,7 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
             (void*)&wa->tcb ) ;
 
     if (!h) {
-        qoraal_free (QORAAL_HeapOperatingSystem, wa);
+        qoraal_free (heap ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, wa);
         return EFAIL ;
     }
 
@@ -214,7 +214,7 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
 #endif
 #if defined CFG_OS_THREADX && CFG_OS_THREADX
     if (thread) *thread = 0 ;
-    OS_THREAD_WA_T * const wa = qoraal_malloc (QORAAL_HeapOperatingSystem, stack_size  + sizeof(OS_THREAD_WA_T));
+    OS_THREAD_WA_T * const wa = qoraal_malloc (heap ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, stack_size  + sizeof(OS_THREAD_WA_T));
 
     if (!wa) {
         return E_NOMEM ;
@@ -224,7 +224,7 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
 
     wa->pf  = pf ;
     wa->arg = arg ;
-    wa->heap = 1 ;
+    wa->heap = heap + 1 ;
     tx_event_flags_create (&wa->suspend_evt, "thread") ;
     tx_semaphore_create (&wa->join_sem, "thread", 0) ;
     tx_semaphore_create (&wa->thread_sem, "thread", 0) ;
@@ -239,7 +239,7 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
         tx_event_flags_delete (&wa->suspend_evt) ;
         tx_semaphore_delete (&wa->join_sem) ;
         tx_semaphore_delete (&wa->thread_sem) ;
-        qoraal_free (QORAAL_HeapOperatingSystem, wa);
+        qoraal_free (heap ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, wa);
         return EFAIL ;
 
     }
@@ -403,7 +403,7 @@ os_thread_join (p_thread_t* thread)
     uint32_t* wa = tp->wa ;
     chThdWait ((thread_t*)*thread);
     if (tp->heap) {
-        qoraal_free (QORAAL_HeapOperatingSystem, wa) ;
+        qoraal_free ((tp->heap - 1) ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, wa) ;
     }
 #endif
 #if defined CFG_OS_FREERTOS && CFG_OS_FREERTOS
@@ -473,7 +473,7 @@ os_thread_release (p_thread_t* thread)
     wa = (OS_THREAD_WA_T * )*thread ;
     vTaskDelete ((TaskHandle_t)wa);
     if (wa->heap) {
-        qoraal_free (QORAAL_HeapOperatingSystem, wa) ;
+        qoraal_free ((wa->heap - 1) ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, wa) ;
 
     }
 #endif
@@ -490,7 +490,7 @@ os_thread_release (p_thread_t* thread)
     tx_thread_delete (&wa->tcb) ;
 
     if (wa->heap) {
-        qoraal_free (QORAAL_HeapOperatingSystem, wa) ;
+        qoraal_free ((wa->heap - 1) ? QORAAL_HeapAuxiliary : QORAAL_HeapOperatingSystem, wa) ;
 
     }
 #endif
