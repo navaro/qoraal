@@ -97,14 +97,14 @@
 /*===========================================================================*/
 
 typedef uint64_t    LOGGERT_MASK_T ;
-typedef uint8_t     LOGGERT_TYPE_T ;
+typedef uint8_t     LOGGER_TYPE_T ;
 
-typedef void (*LOGGER_CHANNEL_FP)(void* channel, LOGGERT_TYPE_T /*type*/, uint8_t /*facility*/, const char* /*msg*/) ;
+typedef void (*LOGGER_CHANNEL_FP)(void* channel, LOGGER_TYPE_T /*type*/, uint8_t /*facility*/, const char* /*msg*/) ;
 
 #pragma pack(1)
 typedef struct LOGGGER_CHANNEL_FILTER_S {
     LOGGERT_MASK_T              mask ;
-    LOGGERT_TYPE_T              type ;
+    LOGGER_TYPE_T              type ;
 } LOGGGER_CHANNEL_FILTER_T ;
 #pragma pack()
 
@@ -128,10 +128,10 @@ extern "C" {
     extern int32_t          svc_logger_init (SVC_TASK_PRIO_T  prio) ;
     extern int32_t          svc_logger_start (void) ;
 
-    extern uint32_t         svc_logger_would_log (LOGGERT_TYPE_T type, uint8_t facility) ;
-    extern int32_t          svc_logger_type_log (LOGGERT_TYPE_T type, uint8_t facility, const char *str, ...) ;
-    extern int32_t          svc_logger_type_vlog (LOGGERT_TYPE_T type, uint8_t facility, const char *format_str, va_list args) ;
-    extern int32_t          svc_logger_type_mem (LOGGERT_TYPE_T type, uint8_t facility, const char* mem, uint32_t size, const char * head, const char * tail) ;
+    extern uint32_t         svc_logger_would_log (LOGGER_TYPE_T type, uint8_t facility) ;
+    extern int32_t          svc_logger_type_log (LOGGER_TYPE_T type, uint8_t facility, const char *str, ...) ;
+    extern int32_t          svc_logger_type_vlog (LOGGER_TYPE_T type, uint8_t facility, const char *format_str, va_list args) ;
+    extern int32_t          svc_logger_type_mem (LOGGER_TYPE_T type, uint8_t facility, const char* mem, uint32_t size, const char * head, const char * tail) ;
     
     extern int32_t          svc_logger_printf (const char *format_str, ...) ;
     extern int32_t          svc_logger_vprintf (const char *format_str, va_list args) ;
@@ -146,7 +146,7 @@ extern "C" {
     extern int32_t          svc_logger_wait (uint32_t timeout) ;
     extern int32_t          svc_logger_wait_all (uint32_t timeout) ;
 
-    extern const char *     svs_logger_severity_str (LOGGERT_TYPE_T type) ;
+    extern const char *     svs_logger_severity_str (LOGGER_TYPE_T type) ;
 
     extern LOGGGER_CHANNEL_FILTER_T svs_logger_get_filter (void) ;
 

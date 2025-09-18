@@ -43,7 +43,7 @@ SVC_SERVICES_T      _console_service_id = SVC_SERVICES_INVALID ;
 /*===========================================================================*/
 /* Service Local Functions                                                   */
 /*===========================================================================*/
-static void     console_logger_cb (void* channel, LOGGERT_TYPE_T type, uint8_t facility, const char* msg) ;
+static void     console_logger_cb (void* channel, LOGGER_TYPE_T type, uint8_t facility, const char* msg) ;
 static int32_t  console_out (void* ctx, uint32_t out, const char* str);
 static int32_t  console_get_line (char * buffer, uint32_t len) ;
 
@@ -210,7 +210,7 @@ console_get_line (char * buffer, uint32_t len)
  * @param[in]   msg         The log message to display.
  */
 void
-console_logger_cb (void* channel, LOGGERT_TYPE_T type, uint8_t facility, const char* msg)
+console_logger_cb (void* channel, LOGGER_TYPE_T type, uint8_t facility, const char* msg)
 {
     printf("--- %s\n", msg) ;
 }

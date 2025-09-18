@@ -56,7 +56,7 @@ static OS_MUTEX_DECL        (_logger_mutex) ;
 #define LOG_MESSAGE_SIZE    0
 typedef struct LOGGER_TASK_S {
     SVC_TASKS_T             task ;
-    LOGGERT_TYPE_T          type ;
+    LOGGER_TYPE_T          type ;
     uint8_t                 facility ;
     uint8_t                 reserved ;
     uint16_t                id ;
@@ -205,7 +205,7 @@ logger_task_callback (SVC_TASKS_T *task, uintptr_t parm, uint32_t reason)
 * @notapi
 */
 static LOGGER_TASK_T*
-logger_create_task (LOGGERT_TYPE_T type, uint8_t facility, const char *format_str, va_list  args)
+logger_create_task (LOGGER_TYPE_T type, uint8_t facility, const char *format_str, va_list  args)
 {
     LOGGER_TASK_T* task;
 #if !SVC_LOGGER_APPEND_CRLF
@@ -285,7 +285,7 @@ logger_create_task (LOGGERT_TYPE_T type, uint8_t facility, const char *format_st
  * @notapi
  */
 static int32_t
-svc_logger_vlogx (LOGGERT_TYPE_T type, uint8_t facility, const char *format_str, va_list    args)
+svc_logger_vlogx (LOGGER_TYPE_T type, uint8_t facility, const char *format_str, va_list    args)
 {
     LOGGER_TASK_T* task;
     //static uint16_t id = 0 ;
@@ -347,7 +347,7 @@ svc_logger_vlogx (LOGGERT_TYPE_T type, uint8_t facility, const char *format_str,
  * @svc
  */
 uint32_t
-svc_logger_would_log (LOGGERT_TYPE_T type, uint8_t facility)
+svc_logger_would_log (LOGGER_TYPE_T type, uint8_t facility)
 {
     if (
             SVC_LOGGER_WOULD_LOG(_logger_filter, type, facility)
@@ -378,7 +378,7 @@ svc_logger_would_log (LOGGERT_TYPE_T type, uint8_t facility)
  * @svc
  */
 int32_t
-svc_logger_type_vlog (LOGGERT_TYPE_T type, uint8_t facility, const char *format_str, va_list    args)
+svc_logger_type_vlog (LOGGER_TYPE_T type, uint8_t facility, const char *format_str, va_list    args)
 {
     if (svc_logger_would_log(type, facility)) {
         return svc_logger_vlogx (type, facility, format_str, args) ;
@@ -400,7 +400,7 @@ svc_logger_type_vlog (LOGGERT_TYPE_T type, uint8_t facility, const char *format_
  * @svc
  */
 int32_t
-svc_logger_type_log (LOGGERT_TYPE_T type, uint8_t facility, const char *format_str, ...)
+svc_logger_type_log (LOGGER_TYPE_T type, uint8_t facility, const char *format_str, ...)
 {
     va_list         args;
     va_start(args, format_str);
@@ -603,7 +603,7 @@ svc_logger_vlog_state (int inst, const char *format_str, va_list    args)
 
 
 int32_t
-svc_logger_type_mem (LOGGERT_TYPE_T type, uint8_t facility, const char* mem, uint32_t size, const char * head, const char * tail)
+svc_logger_type_mem (LOGGER_TYPE_T type, uint8_t facility, const char* mem, uint32_t size, const char * head, const char * tail)
 {
     int32_t status = 0 ;
     int len  ;
@@ -829,7 +829,7 @@ svc_logger_wait_all (uint32_t timeout)
 }
 
 const char *
-svs_logger_severity_str (LOGGERT_TYPE_T type)
+svs_logger_severity_str (LOGGER_TYPE_T type)
 {
     uint8_t severity = SVC_LOGGER_GET_SEVERITY(type) ;
     const char * names[] = {
