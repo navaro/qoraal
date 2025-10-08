@@ -114,6 +114,66 @@ typedef TX_TIMER                    os_timer_t ;
 #define OS_THREAD_WORKING_AREA(s, n)                                             \
   uint64_t s[OS_THREAD_WA_SIZE(n) / sizeof (uint64_t)]
 
+#elif defined CFG_OS_ZEPHYR && CFG_OS_ZEPHYR
+
+#include <zephyr/kernel.h>
+
+#define OS_THREAD_PRIO(prio)        (-((int)(prio) / 8))
+#define OS_THREAD_GET_PRIO(prio)    ((uint32_t)(-(prio)) * 8U)
+
+typedef struct k_mutex             os_mutex_t ;
+#define OS_MUTEX_DECL(hmtx)         struct k_mutex __aligned(Z_KERNEL_STACK_OBJ_ALIGN) __mtx_##hmtx = {0}; \
+                                    p_mutex_t hmtx = (p_mutex_t)&__mtx_##hmtx ;
+
+typedef struct k_sem               os_sem_t ;
+#define OS_SEMAPHORE_DECL(hsem)     struct k_sem __aligned(Z_KERNEL_STACK_OBJ_ALIGN) __sem_##hsem = {0}; \
+                                    p_sem_t hsem = (p_sem_t)&__sem_##hsem ;
+
+typedef struct k_event             os_event_t ;
+#define OS_EVENT_DECL(hevent)       struct k_event __aligned(Z_KERNEL_STACK_OBJ_ALIGN) __event_##hevent = {0}; \
+                                    p_event_t hevent = (p_event_t)&__event_##hevent ;
+
+typedef struct os_zephyr_timer_wrapper {
+    struct k_timer timer;
+    p_timer_function_t callback;
+    void *callback_param;
+} os_timer_t ;
+#define OS_TIMER_DECL(htimer)       os_timer_t __aligned(Z_KERNEL_STACK_OBJ_ALIGN) __timer_##htimer = {0}; \
+                                    p_timer_t htimer = (p_timer_t)&__timer_##htimer ;
+
+struct os_zephyr_thread {
+    struct k_thread     thread;
+    struct k_sem        join_sem;
+    struct k_sem        thread_sem;
+    struct k_sem        notify_sem;
+    p_sem_t             pthread_sem;
+    p_thread_function_t entry;
+    void *              arg;
+    int                 heap;
+    int32_t             errno_val;
+    uint32_t            tls_values[4];
+    uint32_t            tls_bitmap;
+    int32_t             notify_value;
+    k_thread_stack_t *  stack_mem;
+    size_t              stack_size;
+    atomic_t            terminated;
+    const char *        name;
+    void *              workspace_base;
+    size_t              workspace_size;
+};
+
+typedef struct os_zephyr_thread    os_thread_static_t ;
+
+#define OS_THREAD_WA_SIZE(stack_size) \
+    (sizeof(uint32_t) + sizeof(os_thread_static_t) + \
+     K_THREAD_STACK_LEN(stack_size) + Z_KERNEL_STACK_OBJ_ALIGN)
+
+#define OS_THREAD_WORKING_AREA(s, n) \
+    struct { \
+        uint32_t requested_stack; \
+        uint8_t  buffer[OS_THREAD_WA_SIZE(n) - sizeof(uint32_t)]; \
+    } __aligned(Z_KERNEL_STACK_OBJ_ALIGN) s = { (uint32_t)(n), {0} }
+
 #elif defined CFG_OS_POSIX && CFG_OS_POSIX
 
 #include <pthread.h>
@@ -196,6 +256,8 @@ typedef MLock                       os_mlock_t ;
 #define OS_ST_FREQUENCY             configTICK_RATE_HZ
 #elif defined CFG_OS_THREADX && CFG_OS_THREADX
 #define OS_ST_FREQUENCY             100
+#elif defined CFG_OS_ZEPHYR && CFG_OS_ZEPHYR
+#define OS_ST_FREQUENCY             CONFIG_SYS_CLOCK_TICKS_PER_SEC
 #elif defined CFG_OS_OS_LESS && CFG_OS_OS_LESS
 #define OS_ST_FREQUENCY             1000
 #elif defined CFG_OS_POSIX && CFG_OS_POSIX
@@ -203,3 +265,4 @@ typedef MLock                       os_mlock_t ;
 #endif
 /** @} */
 #endif
+

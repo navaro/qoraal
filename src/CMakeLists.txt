@@ -4,6 +4,7 @@ set(QORAAL_SRCS
     debug.c
     os_mlock.c
     os_posix.c
+    os_zephyr.c
     os.c
     svc/svc_events.c
     svc/svc_logger.c

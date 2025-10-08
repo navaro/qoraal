@@ -35,7 +35,7 @@
 #include "qoraal/common/mlog.h"
 
 #ifndef CFG_OS_STATIC_DECLARATIONS
-#error "CFG_OS_CHIBIOS, CFG_OS_FREERTOS, CFG_OS_THREADX or CFG_OS_POSIX must be defined when compiling qoraal"
+#error "CFG_OS_CHIBIOS, CFG_OS_FREERTOS, CFG_OS_THREADX, CFG_OS_POSIX or CFG_OS_ZEPHYR must be defined when compiling qoraal"
 #endif
 
 extern void keep_servicescmds (void) ;
