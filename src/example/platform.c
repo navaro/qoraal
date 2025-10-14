@@ -146,4 +146,105 @@ platform_flash_read (uint32_t addr, uint32_t len, uint8_t * data)
     return EOK ;
 }
 
-#endif /* CFG_OS_POSIX */
+#elif defined CFG_OS_ZEPHYR
+
+#include <zephyr/kernel.h>
+//#include <zephyr/random/rand32.h>
+#include <zephyr/sys/printk.h>
+
+#include "qoraal/example/platform.h"
+
+static uint32_t _platform_flash_size;
+
+int32_t
+platform_init(uint32_t flash_size)
+{
+    _platform_flash_size = flash_size;
+    return 0;
+}
+
+int32_t
+platform_start(void)
+{
+    ARG_UNUSED(_platform_flash_size);
+    return 0;
+}
+
+int32_t
+platform_stop(void)
+{
+    return 0;
+}
+
+void *
+platform_malloc(QORAAL_HEAP heap, size_t size)
+{
+    ARG_UNUSED(heap);
+    return malloc(size);
+}
+
+void
+platform_free(QORAAL_HEAP heap, void *mem)
+{
+    ARG_UNUSED(heap);
+    free(mem);
+}
+
+void
+platform_print(const char *format)
+{
+    printk("%s", format);
+}
+
+void
+platform_assert(const char *format)
+{
+    printk("%s", format);
+    k_oops();
+}
+
+uint32_t
+platform_current_time(void)
+{
+    return k_uptime_get_32() / 1000U;
+}
+
+uint32_t
+platform_rand(void)
+{
+    return rand();
+}
+
+uint32_t
+platform_wdt_kick(void)
+{
+    return 20U;
+}
+
+int32_t
+platform_flash_erase(uint32_t addr_start, uint32_t addr_end)
+{
+    ARG_UNUSED(addr_start);
+    ARG_UNUSED(addr_end);
+    return E_NOIMPL;
+}
+
+int32_t
+platform_flash_write(uint32_t addr, uint32_t len, const uint8_t *data)
+{
+    ARG_UNUSED(addr);
+    ARG_UNUSED(len);
+    ARG_UNUSED(data);
+    return E_NOIMPL;
+}
+
+int32_t
+platform_flash_read(uint32_t addr, uint32_t len, uint8_t *data)
+{
+    ARG_UNUSED(addr);
+    ARG_UNUSED(len);
+    ARG_UNUSED(data);
+    return E_NOIMPL;
+}
+
+#endif /* CFG_OS_POSIX || CFG_OS_ZEPHYR */

@@ -118,8 +118,8 @@ typedef TX_TIMER                    os_timer_t ;
 
 #include <zephyr/kernel.h>
 
-#define OS_THREAD_PRIO(prio)        (-((int)(prio) / 8))
-#define OS_THREAD_GET_PRIO(prio)    ((uint32_t)(-(prio)) * 8U)
+#define OS_THREAD_PRIO(prio)     (prio)
+#define OS_THREAD_GET_PRIO(p)    (p)
 
 typedef struct k_mutex             os_mutex_t ;
 #define OS_MUTEX_DECL(hmtx)         struct k_mutex __aligned(Z_KERNEL_STACK_OBJ_ALIGN) __mtx_##hmtx = {0}; \
@@ -165,14 +165,11 @@ struct os_zephyr_thread {
 typedef struct os_zephyr_thread    os_thread_static_t ;
 
 #define OS_THREAD_WA_SIZE(stack_size) \
-    (sizeof(uint32_t) + sizeof(os_thread_static_t) + \
+    (sizeof(os_thread_static_t) + \
      K_THREAD_STACK_LEN(stack_size) + Z_KERNEL_STACK_OBJ_ALIGN)
 
 #define OS_THREAD_WORKING_AREA(s, n) \
-    struct { \
-        uint32_t requested_stack; \
-        uint8_t  buffer[OS_THREAD_WA_SIZE(n) - sizeof(uint32_t)]; \
-    } __aligned(Z_KERNEL_STACK_OBJ_ALIGN) s = { (uint32_t)(n), {0} }
+    uint64_t s[(OS_THREAD_WA_SIZE(n) + sizeof (uint64_t))/ sizeof (uint64_t)]
 
 #elif defined CFG_OS_POSIX && CFG_OS_POSIX
 

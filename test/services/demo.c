@@ -298,7 +298,7 @@ qshell_demo_timers (SVC_SHELL_IF_T * pif, char** argv, int argc)
 int32_t
 qshell_demo_dbg (SVC_SHELL_IF_T * pif, char** argv, int argc)
 {
-    char mem[128] ;
+    char mem[128] = {1};
 
     svc_logger_type_mem (SVC_LOGGER_SEVERITY_REPORT, 0, mem, sizeof(mem), "MEM DUMP:\r\n", "\r\n") ;
 

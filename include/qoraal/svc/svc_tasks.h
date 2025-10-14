@@ -59,13 +59,15 @@ typedef enum  {
     SERVICE_PRIO_QUEUE_MAX
 } SVC_TASK_PRIO_T ;
 
-#define SVC_TASK_CFG_MAX            5
+#define SVC_TASK_CFG_MAX            3
 #define SVC_TASK_CFG_DEFAULT  \
                                     {OS_THREAD_PRIO_11, 1024*3, "svc-task0", TIMEOUT_10_SEC}    \
                                     ,{OS_THREAD_PRIO_10, 1024*5, "svc-task1", TIMEOUT_10_SEC}    \
-                                    ,{OS_THREAD_PRIO_5, 1024*5, "svc-task2", TIMEOUT_10_SEC}    \
+                                    ,{OS_THREAD_PRIO_5, 1024*5, "svc-task2", TIMEOUT_10_SEC}    
+#if 0                                    
                                     ,{OS_THREAD_PRIO_4, 1024*5, "svc-task3", TIMEOUT_10_SEC}    \
                                     ,{OS_THREAD_PRIO_3, 1024*5, "svc-task4", TIMEOUT_30_SEC}    
+#endif
 
 /*===========================================================================*/
 /* Module macros.                                                            */

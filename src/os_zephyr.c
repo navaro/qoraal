@@ -26,6 +26,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/spinlock.h>
 #include <string.h>
 #include <stdbool.h>
 #include <errno.h>
@@ -44,6 +45,42 @@ static struct k_spinlock   _tls_lock;
 static uint32_t            _tls_alloc_bitmap;
 static os_zephyr_thread_t  _main_thread;
 static bool                _main_thread_ready;
+
+
+/* --- Priority mapping: OS <-> Zephyr (preemptive only) --- */
+static inline int z_map_os_to_kprio(int os_prio)
+{
+    /* Convert abstract prio to 1..14 “levels” (higher = more important) */
+    int lvl = os_prio / 8;                 /* tolerate raw values */
+    if (lvl < 1)  lvl = 1;
+    if (lvl > 14) lvl = 14;
+
+    /* Zephyr preemptive app range */
+    const int k_hi = K_HIGHEST_APPLICATION_THREAD_PRIO;     /* usually 0 */
+    const int k_lo = K_LOWEST_APPLICATION_THREAD_PRIO;      /* non-neg */
+    const int span = (k_lo - k_hi) > 0 ? (k_lo - k_hi) : 0;
+
+    /* lvl=14 -> highest (k_hi), lvl=1 -> lowest (k_lo), linear in between */
+    const int offset = span ? (span * (14 - lvl)) / 13 : 0;
+    return k_hi + offset;                  /* always >= 0 => preemptive */
+}
+
+static inline uint32_t z_map_kprio_to_os(int kprio)
+{
+    const int k_hi = K_HIGHEST_APPLICATION_THREAD_PRIO;
+    const int k_lo = K_LOWEST_APPLICATION_THREAD_PRIO;
+    const int span = (k_lo - k_hi) > 0 ? (k_lo - k_hi) : 0;
+
+    if (kprio <= k_hi) return 14U * 8U;    /* clamp to highest */
+    if (kprio >= k_lo) return  1U * 8U;    /* clamp to lowest  */
+
+    /* Inverse of the linear map above (rounded) */
+    int num = (kprio - k_hi) * 13 + (span / 2);
+    int lvl = 14 - (span ? (num / span) : 0);
+    if (lvl < 1)  lvl = 1;
+    if (lvl > 14) lvl = 14;
+    return (uint32_t)(lvl * 8);
+}
 
 static inline k_timeout_t
 os_zephyr_timeout_from_ticks(uint32_t ticks)
@@ -66,41 +103,71 @@ os_zephyr_thread_layout(void *workspace, size_t workspace_size, size_t stack_siz
         return NULL;
     }
 
-    size_t total_size = workspace_size;
-    uint8_t *base_ptr = (uint8_t *)workspace;
-    if (stack_size == 0U) {
-        stack_size = ((uint32_t *)base_ptr)[0];
-    } else if (write_header) {
-        ((uint32_t *)base_ptr)[0] = (uint32_t)stack_size;
+    const size_t total_size = workspace_size;
+    uint8_t *base = (uint8_t *)workspace;
+
+    // Optional header behavior remains for dynamic callers that want it
+    if (stack_size > 0U) {
+        if (write_header) {
+            ((uint32_t *)base)[0] = (uint32_t)stack_size;
+        }
+        base += sizeof(uint32_t);
+        workspace_size -= sizeof(uint32_t);
+    } else {
+        // Static WA path: ignore header; use entire WA after the 4B cell
+        base += sizeof(uint32_t);
+        workspace_size -= sizeof(uint32_t);
     }
 
-    if (stack_size == 0U) {
-        return NULL;
+    const uintptr_t ws_start = (uintptr_t)base;
+    const uintptr_t ws_end   = ws_start + workspace_size;
+
+    // Place the thread object at the beginning
+    uintptr_t thread_addr = ROUND_UP(ws_start, __alignof__(os_zephyr_thread_t));
+    uintptr_t after_thread = thread_addr + sizeof(os_zephyr_thread_t);
+
+    // Compute stack buffer:
+    // - dynamic: reserve K_THREAD_STACK_LEN(user_size)
+    // - static : take all remaining bytes, aligned, and anchor at end
+    size_t stack_len;
+    uintptr_t stack_addr;
+
+    if (stack_size > 0U) {
+        stack_len  = K_THREAD_STACK_LEN(stack_size);
+        stack_addr = ROUND_UP(after_thread, Z_KERNEL_STACK_OBJ_ALIGN);
+        uintptr_t required_end = stack_addr + stack_len;
+        if (required_end > ws_end) {
+            return NULL;
+        }
+    } else {
+        // Consume all remaining space for the stack, start it at the END of WA
+        uintptr_t tmp_end = ws_end;
+        // Align end down for stack object alignment
+        tmp_end = ROUND_DOWN(tmp_end, Z_KERNEL_STACK_OBJ_ALIGN);
+
+        // Start address is end - len. First, figure out how much we *can* take.
+        // Ensure thread object fits before the stack (stack at end).
+        if (after_thread > tmp_end) {
+            return NULL;
+        }
+        stack_len = (size_t)(tmp_end - after_thread);
+        // Align stack_len down to object alignment granularity
+        stack_len = ROUND_DOWN(stack_len, Z_KERNEL_STACK_OBJ_ALIGN);
+        if (stack_len == 0U) {
+            return NULL;
+        }
+        stack_addr = tmp_end - stack_len;
     }
 
-    base_ptr += sizeof(uint32_t);
-    workspace_size -= sizeof(uint32_t);
-
-    uintptr_t workspace_start = (uintptr_t)base_ptr;
-    uintptr_t workspace_end = workspace_start + workspace_size;
-
-    uintptr_t thread_addr = ROUND_UP(workspace_start, __alignof__(os_zephyr_thread_t));
-    uintptr_t stack_addr = ROUND_UP(thread_addr + sizeof(os_zephyr_thread_t), Z_KERNEL_STACK_OBJ_ALIGN);
-    uintptr_t required_end = stack_addr + K_THREAD_STACK_LEN(stack_size);
-
-    if (required_end > workspace_end) {
-        return NULL;
-    }
-
-    size_t clear_bytes = workspace_end - thread_addr;
-    memset((void *)thread_addr, 0, clear_bytes);
+    // Zero the control block and stack area we own
+    memset((void *)thread_addr, 0, ws_end - thread_addr);
 
     os_zephyr_thread_t *thread = (os_zephyr_thread_t *)thread_addr;
-    thread->stack_mem = (k_thread_stack_t *)stack_addr;
-    thread->stack_size = stack_size;
+    thread->stack_mem     = (k_thread_stack_t *)stack_addr;
+    thread->stack_size    = stack_len;                 // <-- store BYTES we pass to k_thread_create
     thread->workspace_base = workspace;
     thread->workspace_size = total_size;
-    thread->pthread_sem = (p_sem_t)&thread->thread_sem;
+    thread->pthread_sem   = (p_sem_t)&thread->thread_sem;
 
     return thread;
 }
@@ -307,7 +374,7 @@ os_thread_create(uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
                                   thread->stack_size,
                                   os_zephyr_thread_entry,
                                   thread, NULL, NULL,
-                                  OS_THREAD_PRIO(prio),
+                                  z_map_os_to_kprio(prio),
                                   0,
                                   K_NO_WAIT);
 
@@ -356,7 +423,7 @@ os_thread_create_static(void *wsp, uint16_t size, uint32_t prio,
                                   thread->stack_size,
                                   os_zephyr_thread_entry,
                                   thread, NULL, NULL,
-                                  OS_THREAD_PRIO(prio),
+                                  z_map_os_to_kprio(prio),
                                   0,
                                   K_NO_WAIT);
     if (!tid) {
@@ -460,7 +527,7 @@ uint32_t
 os_thread_get_prio(void)
 {
     int prio = k_thread_priority_get(k_current_get());
-    return OS_THREAD_GET_PRIO(prio);
+    return z_map_kprio_to_os(prio);
 }
 
 uint32_t
@@ -476,8 +543,8 @@ os_thread_set_prio(p_thread_t *thread_handle, uint32_t prio)
     }
 
     int old = k_thread_priority_get(target);
-    k_thread_priority_set(target, OS_THREAD_PRIO(prio));
-    return OS_THREAD_GET_PRIO(old);
+    k_thread_priority_set(target, z_map_os_to_kprio(prio));
+    return z_map_kprio_to_os(old);
 }
 
 int32_t
@@ -487,7 +554,7 @@ os_thread_tls_alloc(int32_t *index)
         return E_PARM;
     }
 
-    struct k_spinlock_key key = k_spin_lock(&_tls_lock);
+    k_spinlock_key_t key = k_spin_lock(&_tls_lock);
     for (int i = 0; i < MAX_TLS_ID; ++i) {
         if ((~_tls_alloc_bitmap) & (1U << i)) {
             _tls_alloc_bitmap |= (1U << i);
@@ -508,7 +575,7 @@ os_thread_tls_free(int32_t index)
         return;
     }
 
-    struct k_spinlock_key key = k_spin_lock(&_tls_lock);
+    k_spinlock_key_t key = k_spin_lock(&_tls_lock);
     _tls_alloc_bitmap &= ~(1U << index);
     k_spin_unlock(&_tls_lock, key);
 }
