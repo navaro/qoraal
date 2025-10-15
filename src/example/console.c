@@ -26,6 +26,7 @@
 #include "qoraal/qoraal.h"
 #include "qoraal/svc/svc_services.h"
 #include "qoraal/svc/svc_shell.h"
+#include "console.h"
 
 
 /*===========================================================================*/
@@ -48,7 +49,7 @@ static int32_t  console_out (void* ctx, uint32_t out, const char* str);
 static int32_t  console_get_line (char * buffer, uint32_t len) ;
 
 static int32_t qshell_get_char(uint32_t timeout) ;
-static void qshell_uart_write(const uint8_t *data, size_t len);
+
 
 SVC_SHELL_CMD_DECL("exit", qshell_cmd_exit, "");
 SVC_SHELL_CMD_DECL("version", qshell_cmd_version, "");
@@ -124,7 +125,7 @@ console_print (const char* str)
 #if defined CFG_OS_ZEPHYR
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 	if (device_is_ready(cons)) {
-		qshell_uart_write (str, strlen(str)) ;
+		console_write (str, strlen(str), 500) ;
 
 	}
 #endif
@@ -149,7 +150,6 @@ console_service_run (uintptr_t arg)
     SVC_SHELL_IF_T  qshell_cmd_if ;
     svc_shell_if_init (&qshell_cmd_if, 0, console_out, 0) ;
 
-    qshell_uart_init () ;
 
     /*
      * Now process the input from the command line as shell commands until
@@ -193,7 +193,7 @@ console_out (void* ctx, uint32_t out, const char* str)
 #endif
 #if defined CFG_OS_ZEPHYR
     if (str && (out && out < SVC_SHELL_IN_STD)) {
-    	qshell_uart_write (str, strlen(str)) ;
+    	console_write (str, strlen(str), 500) ;
 
     }
 #endif
@@ -231,7 +231,7 @@ console_get_line (char * buffer, uint32_t len)
     }
 #else
     for (i=0; i<len; ) {
-        int c = qshell_get_char(1000);
+        int c = console_get_char(1000);
 
         if (_shell_exit) break;
 
@@ -239,8 +239,9 @@ console_get_line (char * buffer, uint32_t len)
             continue;
         }
 
-        buffer[i++] = (char)c;
-        qshell_uart_write (&c,1) ;
+        buffer[i] = (char)c;
+        console_write (&buffer[i],1, 50) ;
+        i++;
         if (c == '\n') break;
 
 
@@ -270,8 +271,8 @@ console_logger_cb (void* channel, LOGGER_TYPE_T type, uint8_t facility, const ch
 #if defined CFG_OS_ZEPHYR
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 	if (device_is_ready(cons)) {
-        qshell_uart_write (msg, strlen(msg)) ;
-        qshell_uart_write ("\r\n", strlen("\r\n")) ;
+        console_write (msg, strlen(msg), 500) ;
+        console_write ("\r\n", strlen("\r\n"), 500) ;
 
 	}
 #endif
@@ -286,7 +287,6 @@ static void
 status_callback (SVC_SERVICES_T  id, int32_t status, uintptr_t parm)
 {
     CONSOLE_EXIT_T * pexit = (CONSOLE_EXIT_T *)parm ;
-    p_sem_t    stop_sem = (p_sem_t) parm ;
     if ((status == SVC_SERVICE_STATUS_STOPPED || status == SVC_SERVICE_STATUS_STOPPING) && 
         (id == pexit->id || id == _console_service_id)) {
         os_sem_signal (&pexit->sem) ;
@@ -342,6 +342,8 @@ int32_t
 qshell_cmd_hello (SVC_SHELL_IF_T * pif, char** argv, int argc)
 {
     svc_shell_print (pif, SVC_SHELL_OUT_STD, "%s\r\n\r\n", SHELL_HELLO) ;
+
+
     return SVC_SHELL_CMD_E_OK ;
 }
 
@@ -362,161 +364,4 @@ qshell_cmd_exit (SVC_SHELL_IF_T * pif, char** argv, int argc)
     return SVC_SHELL_CMD_E_OK ;
 }
 
-
-#include <zephyr/device.h>
-#include <zephyr/drivers/uart.h>
-#include <zephyr/kernel.h>
-#include <zephyr/sys/ring_buffer.h>
-
-/* === Config === */
-#define RB_SZ 64
-
-/* === State === */
-static const struct device *qshell_uart;
-static struct ring_buf rb;
-static uint8_t rb_mem[RB_SZ];
-static OS_SEMAPHORE_DECL(rx_sem);   // counting sem to wake the pump
-
-
-/* === ISR: pull bytes from HW FIFO into ring; wake reader === */
-static void qshell_uart_isr(const struct device *dev, void *user_data)
-{
-    ARG_UNUSED(user_data);
-
-    /* Drain RX FIFO */
-    while (uart_irq_update(dev) && uart_irq_rx_ready(dev)) {
-        uint8_t tmp[64];
-        int n = uart_fifo_read(dev, tmp, sizeof(tmp));
-        if (n <= 0) {
-            break;
-        }
-        (void)ring_buf_put(&rb, tmp, (uint32_t)n);
-        os_sem_signal_isr(&rx_sem);
-    }
-}
-
-/* Simple pump task: forward bytes to your parser */
-static int32_t qshell_get_char(uint32_t timeout)
-{
-    uint8_t c;
-    uint32_t got;
-
-    /* 1) Fast path: something already in the ring? */
-    got = ring_buf_get(&rb, &c, 1);
-    if (got == 1) {
-        return (int32_t)c;
-    }
-
-    /* 2) Nothing there: wait to be poked by ISR */
-    if (os_sem_wait_timeout(&rx_sem, OS_MS2TICKS(timeout)) != EOK) {
-        return -1; /* timeout (or error) */
-    }
-
-    /* 3) We were signaled—try once more */
-    got = ring_buf_get(&rb, &c, 1);
-    return (got == 1) ? (int32_t)c : -1;
-}
-
-int qshell_uart_init(void)
-{
-    /* Pick your device */
-    qshell_uart = DEVICE_DT_GET(DT_NODELABEL(uart0));
-    // or: qshell_uart = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
-
-
-    if (!device_is_ready(qshell_uart)) {
-        return -ENODEV;
-    }
-
-    (void)os_sem_init(&rx_sem, 0);
-
-    ring_buf_init(&rb, sizeof(rb_mem), rb_mem);
-
-
-    uart_irq_callback_user_data_set(qshell_uart, qshell_uart_isr, NULL);
-    uart_irq_rx_enable(qshell_uart);
-
-    return 0;
-}
-
-/* Optional: TX helper for echo / responses */
-void qshell_uart_write(const uint8_t *data, size_t len)
-{
-    /* Async API has TX too: uart_tx(qshell_uart, data, len, SYS_FOREVER_MS); */
-    for (size_t i = 0; i < len; i++) {
-        uart_poll_out(qshell_uart, data[i]);
-    }
-}
-
-
-/* Build this file only when the shell is disabled */
-#if !IS_ENABLED(CONFIG_SHELL)
-
-#include <stdarg.h>
-#include <zephyr/sys/printk.h>
-#include <zephyr/sys/printk.h>
-#include <zephyr/sys/util.h>
-
-/* Forward-declare to satisfy signatures used in your code */
-struct shell;
-
-/* Minimal vsnprintf wrapper to a local buffer, then printk */
-static void vprint_normal(const char *fmt, va_list ap)
-{
-    char buf[256];
-    int n = vsnprintk(buf, sizeof(buf), fmt, ap);
-    if (n > 0) {
-        /* ensure NUL-terminated printing */
-        buf[MIN(n, (int)sizeof(buf) - 1)] = '\0';
-        printk("%s", buf);
-    }
-}
-
-/* Common shell APIs you might call; map them to printk. Add more if needed. */
-void shell_print(const struct shell *sh, const char *fmt, ...)
-{
-    ARG_UNUSED(sh);
-    va_list ap; va_start(ap, fmt);
-    vprint_normal(fmt, ap);
-    va_end(ap);
-    printk("\n");
-}
-
-void shell_error(const struct shell *sh, const char *fmt, ...)
-{
-    ARG_UNUSED(sh);
-    va_list ap; va_start(ap, fmt);
-    vprint_normal("ERR: ", ap);  /* keep it simple */
-    va_end(ap);
-    printk("\n");
-}
-
-void shell_warn(const struct shell *sh, const char *fmt, ...)
-{
-    ARG_UNUSED(sh);
-    va_list ap; va_start(ap, fmt);
-    vprint_normal("WARN: ", ap);
-    va_end(ap);
-    printk("\n");
-}
-
-/* Your code referenced this internal helper; provide a normal-mode alias */
-void shell_fprintf_normal(const struct shell *sh, const char *fmt, ...)
-{
-    ARG_UNUSED(sh);
-    va_list ap; va_start(ap, fmt);
-    vprint_normal(fmt, ap);
-    va_end(ap);
-}
-
-/* Your code referenced this internal helper; provide a normal-mode alias */
-void shell_fprintf_error(const struct shell *sh, const char *fmt, ...)
-{
-    ARG_UNUSED(sh);
-    va_list ap; va_start(ap, fmt);
-    shell_error(sh, fmt, ap);
-    va_end(ap);
-}
-
-#endif /* !CONFIG_SHELL */
 #endif
