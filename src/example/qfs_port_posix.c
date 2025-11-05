@@ -1,5 +1,5 @@
 // qfs_port_posix.c
-#include "qfs_port.h"
+#include "qoraal/qfs_port.h"
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -61,3 +61,9 @@ int qfs_match(const char *pattern, const char *name) {
     return (fnmatch(pattern, name, 0) == 0) ? 1 : 0;
 }
 
+int qfs_mkdir(const char *path)
+{
+    int rc = mkdir(path, 0777);
+    if (rc < 0 && errno == EEXIST) return 0;  /* ok if it already exists */
+    return rc;
+}

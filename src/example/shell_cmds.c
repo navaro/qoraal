@@ -46,7 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "qfs_port.h"
+#include "qoraal/qfs_port.h"
 #include "qoraal/svc/svc_shell.h"
 
 /* -------------------------------------------------------------------------- */
@@ -322,6 +322,80 @@ qshell_cmd_rm (SVC_SHELL_IF_T * pif, char** argv, int argc)
     return overall_rc;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  mkdir                                                                     */
+/* -------------------------------------------------------------------------- */
+
+static int mkdir_parents(const char *path_in)
+{
+    /* Create all path components, ignoring "already exists" errors. */
+    char path[QFS_PATH_MAX];
+    size_t len = strnlen(path_in, sizeof(path)-1);
+    if (len == 0) return -1;
+
+    /* normalize into a mutable buffer */
+    strncpy(path, path_in, sizeof(path)-1);
+    path[sizeof(path)-1] = '\0';
+
+    /* If absolute, start after leading '/' group */
+    size_t i = 0;
+    if (path[0] == '/') i = 1;
+
+    for (; i < strlen(path); ++i) {
+        if (path[i] == '/') {
+            char saved = path[i];
+            path[i] = '\0';
+            if (path[0] != '\0') {
+                /* Ignore failure for intermediate components (already exists, etc.) */
+                (void)qfs_mkdir(path);
+            }
+            path[i] = saved;
+        }
+    }
+
+    /* Create the final leaf */
+    return qfs_mkdir(path);
+}
+
+static int32_t
+qshell_cmd_mkdir (SVC_SHELL_IF_T * pif, char** argv, int argc)
+{
+    if (argc < 2) {
+        return SVC_SHELL_CMD_E_PARMS; /* usage error */
+    }
+
+    int parents = 0;
+    int first_path_idx = 1;
+
+    if (strcmp(argv[1], "-p") == 0) {
+        parents = 1;
+        first_path_idx = 2;
+        if (argc < 3) return SVC_SHELL_CMD_E_PARMS;
+    }
+
+    int32_t overall = SVC_SHELL_CMD_E_OK;
+
+    for (int i = first_path_idx; i < argc; ++i) {
+        const char *arg = argv[i];
+
+        char abs[QFS_PATH_MAX];
+        if (qfs_make_abs(abs, sizeof(abs), arg) != 0) {
+            svc_shell_print(pif, SVC_SHELL_OUT_STD, "error: bad path: %s\r\n", arg);
+            overall = SVC_SHELL_CMD_E_FAIL;
+            continue;
+        }
+
+        int rc = parents ? mkdir_parents(abs) : qfs_mkdir(abs);
+        if (rc < 0) {
+            svc_shell_print(pif, SVC_SHELL_OUT_STD, "mkdir failed (%d): %s\r\n", rc, abs);
+            overall = SVC_SHELL_CMD_E_FAIL;
+        } else {
+            svc_shell_print(pif, SVC_SHELL_OUT_STD, "created: %s\r\n", abs);
+        }
+    }
+
+    return overall;
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Command declarations                                                      */
@@ -335,6 +409,7 @@ SVC_SHELL_CMD_DECL("cat",    qshell_cmd_cat,    "<file>");
 SVC_SHELL_CMD_DECL("pwd",    qshell_cmd_pwd,    "");
 SVC_SHELL_CMD_DECL("echo",   qshell_cmd_echo,   "[string]");
 SVC_SHELL_CMD_DECL("rm",     qshell_cmd_rm,     "[file]");
+SVC_SHELL_CMD_DECL("mkdir",  qshell_cmd_mkdir,  "[-p] <path> [more_paths...]");
 
 /* Optional: ensure linker keeps the functions even if LTO/GC is aggressive. */
 static void keep_shell_cmds(void)
@@ -346,6 +421,7 @@ static void keep_shell_cmds(void)
     (void)qshell_cmd_pwd;
     (void)qshell_cmd_echo;
     (void)qshell_cmd_rm;
+    (void)qshell_cmd_mkdir;
 }
 
 #endif /* CFG_OS_POSIX */

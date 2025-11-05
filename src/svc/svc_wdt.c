@@ -130,7 +130,7 @@ svc_wdt_register (SVC_WDT_HANDLE_T * handler, SVC_WDT_TIMEOUTS_T id)
     if (id < TIMEOUT_LAST) {
         os_mutex_lock (&_svc_wdt_mutex) ;
 
-        //stack_remove (&_svc_wdt_handler_stack[id], (plists_t)handler, OFFSETOF(SVC_WDT_HANDLE_T, next)) ;
+        stack_remove (&_svc_wdt_handler_stack[id], (plists_t)handler, OFFSETOF(SVC_WDT_HANDLE_T, next)) ;
         stack_add_head (&_svc_wdt_handler_stack[id], handler, OFFSETOF(SVC_WDT_HANDLE_T, next)) ;
 
         os_mutex_unlock (&_svc_wdt_mutex) ;

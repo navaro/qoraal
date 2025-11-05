@@ -41,6 +41,9 @@ int qfs_rmdir (const char *path);     // 0 on success, <0 on error (optional; fo
 // Returns: 1 = match, 0 = no match.
 int qfs_match(const char *pattern, const char *name);
 
+
+int qfs_mkdir(const char *path) ;
+
 #ifdef __cplusplus
 }
 #endif
