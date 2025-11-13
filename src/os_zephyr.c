@@ -492,7 +492,9 @@ os_thread_join_timeout(p_thread_t *thread_handle, uint32_t ticks)
     }
 
     int rc = k_sem_take(&thread->join_sem, os_zephyr_timeout_from_ticks(ticks));
+    
     if (rc == 0) {
+        os_thread_release (thread_handle);
         return EOK;
     }
     return E_TIMEOUT;
@@ -512,7 +514,6 @@ os_thread_release(p_thread_t *thread_handle)
         k_sem_give(&thread->join_sem);
     }
 
-    os_thread_join(thread_handle);
 
     if (thread->heap && thread->workspace_base) {
         qoraal_free(QORAAL_HeapOperatingSystem, thread->workspace_base);

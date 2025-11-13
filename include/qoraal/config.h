@@ -52,6 +52,11 @@
 */
 // #define CFG_OS_MEM_DEBUG_ENABLE        1
 
+/* CFG_OS_MALLOC_DEBUG_ENABLE
+    If defined, the platform prepends heap information to all debug messages.
+*/
+#define CFG_OS_MALLOC_DEBUG_ENABLE        1
+
 /* CFG_PLATFORM_ENABLE_WS2
     If defined, the platform does initialisatin for ws2 (windows) sockets
 */

@@ -48,12 +48,14 @@ static void     console_logger_cb (void* channel, LOGGER_TYPE_T type, uint8_t fa
 static int32_t  console_out (void* ctx, uint32_t out, const char* str);
 static int32_t  console_get_line (char * buffer, uint32_t len) ;
 
-static int32_t qshell_get_char(uint32_t timeout) ;
 
 
 SVC_SHELL_CMD_DECL("exit", qshell_cmd_exit, "");
 SVC_SHELL_CMD_DECL("version", qshell_cmd_version, "");
 SVC_SHELL_CMD_DECL("hello", qshell_cmd_hello, "");
+SVC_SHELL_CMD_DECL("dbg", qshell_cmd_dbg, "");
+
+
 
 extern void keep_posixcmds (void) ;
 int qshell_uart_init(void) ;
@@ -271,8 +273,11 @@ console_logger_cb (void* channel, LOGGER_TYPE_T type, uint8_t facility, const ch
 #if defined CFG_OS_ZEPHYR
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 	if (device_is_ready(cons)) {
-        console_write (msg, strlen(msg), 500) ;
-        console_write ("\r\n", strlen("\r\n"), 500) ;
+        //console_write (msg, strlen(msg), 500) ;
+        //console_write ("\r\n", strlen("\r\n"), 500) ;
+
+        qoraal_debug_print (msg) ;
+        qoraal_debug_print ("\r\n") ;
 
 	}
 #endif
@@ -361,6 +366,23 @@ int32_t
 qshell_cmd_exit (SVC_SHELL_IF_T * pif, char** argv, int argc)
 {
     _shell_exit = true ;
+    return SVC_SHELL_CMD_E_OK ;
+}
+
+/**
+ * @brief       qshell_cmd_exit
+ * @details     Exits the shell service.
+ *
+ * @param[in]   pif     Shell interface pointer.
+ * @param[in]   argv    Command-line arguments.
+ * @param[in]   argc    Number of command-line arguments.
+ *
+ * @return      status  The result of the command execution.
+ */
+int32_t
+qshell_cmd_dbg (SVC_SHELL_IF_T * pif, char** argv, int argc)
+{
+    qoraal_debug_print (" \r\n") ;
     return SVC_SHELL_CMD_E_OK ;
 }
 

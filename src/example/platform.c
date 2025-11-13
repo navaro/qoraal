@@ -153,6 +153,9 @@ platform_flash_read (uint32_t addr, uint32_t len, uint8_t * data)
 #include <zephyr/sys/printk.h>
 
 #include "qoraal/example/platform.h"
+#include <stdlib.h>
+
+extern size_t console_write(const uint8_t *data, size_t len, uint32_t timeout_ms) ;
 
 static uint32_t _platform_flash_size;
 
@@ -193,7 +196,8 @@ platform_free(QORAAL_HEAP heap, void *mem)
 void
 platform_print(const char *format)
 {
-    printk("%s", format);
+    console_write (format, strlen(format), 1000) ;
+   // printk("%s", format);
 }
 
 void

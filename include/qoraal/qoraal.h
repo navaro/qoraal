@@ -110,9 +110,11 @@ int32_t     qoraal_svc_init (SVC_SERVICE_T * list) ;
 void *      qoraal_malloc (QORAAL_HEAP heap, size_t size) ;
 void        qoraal_free (QORAAL_HEAP heap, void *mem) ;
 
-static inline void qoraal_debug_print (const char *message) {
-    if (_qoraal_instance && _qoraal_instance->debug_print) _qoraal_instance->debug_print (message);
-}
+void qoraal_debug_print (const char *message) ;
+
+//static inline void qoraal_debug_print (const char *message) {
+//    if (_qoraal_instance && _qoraal_instance->debug_print) _qoraal_instance->debug_print (message);
+//}
 
 static inline void qoraal_debug_assert (const char *message) {
     if (_qoraal_instance && _qoraal_instance->debug_assert) _qoraal_instance->debug_assert (message);
