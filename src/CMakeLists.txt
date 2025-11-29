@@ -22,7 +22,8 @@ set(QORAAL_SRCS
     common/strsub.c
     example/console.c
     example/platform.c
-    example/posixcmd.c
+    example/qfs_port_posix.c
+    example/shell_cmds.c
     qshell/servicescmd.c
 )
 

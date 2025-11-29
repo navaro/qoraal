@@ -24,7 +24,7 @@
 
 #include "qoraal/config.h"
 #if 1
-
+#include <stdio.h>
 #include "qoraal/qoraal.h"
 #include "qoraal/svc/svc_events.h"
 #include "qoraal/svc/svc_tasks.h"

@@ -139,6 +139,9 @@ qoraal_stop_default (void)
 #define DEBUG_TAIL_FILL      0
 #define DEBUG_CLEAR_FILL     0
 #define DEBUG_HEADER         0
+#ifdef DEBUG_BYTES
+#undef DEBUG_BYTES
+#endif
 #define DEBUG_BYTES          (DEBUG_SIZE_HEAD + DEBUG_SIZE_TAIL + DEBUG_HEADER + sizeof(uint32_t))
 #endif
 #endif

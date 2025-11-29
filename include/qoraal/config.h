@@ -1,4 +1,4 @@
-#define CFG_OS_ZEPHYR    1
+// #define CFG_OS_ZEPHYR    1
 /* CFG_DEBUG_SVC_LOGGER_DISABLE
     If defined, the logger service will not use svc_logger to route debug logging.
 */
