@@ -20,10 +20,10 @@ set(QORAAL_SRCS
     common/mlog.c
     common/rtclib.c
     common/strsub.c
-    example/console.c
-    example/platform.c
-    example/qfs_port_posix.c
-    example/shell_cmds.c
+    qshell/console.c
+    qshell/qfs_port_posix.c
+    qshell/qfs_port_zephyr.c
+    qshell/fscmds.c
     qshell/servicescmd.c
 )
 

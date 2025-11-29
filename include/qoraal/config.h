@@ -61,3 +61,18 @@
     If defined, the platform does initialisatin for ws2 (windows) sockets
 */
 // #define CFG_PLATFORM_ENABLE_WS2        1
+
+/* CFG_QSHELL_CONSOLE_ENABLE
+    If defined, a console is included in the build
+*/
+#define CFG_QSHELL_CONSOLE_ENABLE       1
+
+/* CFG_QSHELL_CONSOLE_ENABLE
+    If defined, a filesystem shell is included in the build
+*/
+#define CFG_QSHELL_FS_ENABLE            1
+
+/* CFG_QSHELL_SERVICES_ENABLE
+    If defined, a services shell is included in the build
+*/
+#define CFG_QSHELL_SERVICES_ENABLE       1

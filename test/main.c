@@ -11,8 +11,8 @@
 #include "qoraal/svc/svc_shell.h"
 #include "qoraal/common/mlog.h"
 #include "services/services.h"
-#include "qoraal/example/console.h"
-#include "qoraal/example/platform.h"
+#include "qoraal/qshell/console.h"
+#include "platform.h"
 
 /*===========================================================================*/
 /* Macros and Defines                                                        */
