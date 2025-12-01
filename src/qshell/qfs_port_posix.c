@@ -1,5 +1,6 @@
 #include "qoraal/config.h"
 #if defined CFG_OS_POSIX
+#include "qoraal/qoraal.h"
 #include "qoraal/qfs_port.h"
 #include <dirent.h>
 #include <unistd.h>
@@ -17,7 +18,7 @@ struct qfs_dir { DIR *dp; };
 int qfs_dir_open(qfs_dir_t **out, const char *path) {
     DIR *dp = opendir(path ? path : ".");
     if (!dp) return -1;
-    *out = malloc(sizeof(**out));
+    *out = qoraal_malloc(QORAAL_HeapAuxiliary, sizeof(**out));
     if (!*out) {
         closedir(dp);
         return -1;
@@ -48,7 +49,7 @@ int qfs_dir_read(qfs_dir_t *d, qfs_dirent_t *e) {
 void qfs_dir_close(qfs_dir_t *d) {
     if (d) {
         closedir(d->dp);
-        free(d);
+        qoraal_free(QORAAL_HeapAuxiliary, d);
     }
 }
 
@@ -73,7 +74,7 @@ int qfs_read_all(const char *path, char **out_buf) {
         return -4;
     }
 
-    char *buf = malloc((size_t)sz + 1);
+    char *buf = qoraal_malloc(QORAAL_HeapAuxiliary, (size_t)sz + 1);
     if (!buf) {
         fclose(fp);
         return -5;
@@ -83,7 +84,7 @@ int qfs_read_all(const char *path, char **out_buf) {
     fclose(fp);
 
     if (n != (size_t)sz) {
-        free(buf);
+        qoraal_free(QORAAL_HeapAuxiliary, buf);
         return -6;
     }
 
