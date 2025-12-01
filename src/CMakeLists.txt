@@ -4,6 +4,7 @@ set(QORAAL_SRCS
     debug.c
     os_mlock.c
     os_posix.c
+    os_zephyr.c
     os.c
     svc/svc_events.c
     svc/svc_logger.c
@@ -19,9 +20,10 @@ set(QORAAL_SRCS
     common/mlog.c
     common/rtclib.c
     common/strsub.c
-    example/console.c
-    example/platform.c
-    example/posixcmd.c
+    qshell/console.c
+    qshell/qfs_port_posix.c
+    qshell/qfs_port_zephyr.c
+    qshell/fscmds.c
     qshell/servicescmd.c
 )
 

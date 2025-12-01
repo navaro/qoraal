@@ -35,10 +35,10 @@
 #include "qoraal/common/mlog.h"
 
 #ifndef CFG_OS_STATIC_DECLARATIONS
-#error "CFG_OS_CHIBIOS, CFG_OS_FREERTOS, CFG_OS_THREADX or CFG_OS_POSIX must be defined when compiling qoraal"
+#error "CFG_OS_CHIBIOS, CFG_OS_FREERTOS, CFG_OS_THREADX, CFG_OS_POSIX or CFG_OS_ZEPHYR must be defined when compiling qoraal"
 #endif
 
-extern void keep_servicescmds (void) ;
+extern void svc_shell_servicescmds_force_link (void) ;
 
 
 const QORAAL_CFG_T * _qoraal_instance = 0 ;
@@ -76,7 +76,7 @@ qoraal_init_default (const QORAAL_CFG_T * instance, SVC_SERVICE_T * list)
         svc_service_services_init (list) ;
     }
 
-    keep_servicescmds () ;
+    svc_shell_servicescmds_force_link () ;
     
     return EOK ;
 }
@@ -130,6 +130,45 @@ qoraal_stop_default (void)
 #define DEBUG_BYTES          0
 #endif
 
+#if defined CFG_OS_MALLOC_DEBUG_ENABLE
+#ifndef CFG_OS_MEM_DEBUG_ENABLE
+#define CFG_OS_MEM_DEBUG_ENABLE
+#define DEBUG_SIZE_HEAD      0
+#define DEBUG_SIZE_TAIL      0
+#define DEBUG_HEAD_FILL      0
+#define DEBUG_TAIL_FILL      0
+#define DEBUG_CLEAR_FILL     0
+#define DEBUG_HEADER         0
+#ifdef DEBUG_BYTES
+#undef DEBUG_BYTES
+#endif
+#define DEBUG_BYTES          (DEBUG_SIZE_HEAD + DEBUG_SIZE_TAIL + DEBUG_HEADER + sizeof(uint32_t))
+#endif
+#endif
+
+#if defined CFG_OS_MALLOC_DEBUG_ENABLE
+
+uint32_t    _malloc_total = 0 ;
+
+#endif
+
+void 
+qoraal_debug_print (const char *message) 
+{
+   if (_qoraal_instance && _qoraal_instance->debug_print) {
+        if (message[0] != '\r' && message[0] != '\n') {
+            char buffer[32] ;
+            snprintf (buffer, sizeof(buffer), "%.4d  - ", _malloc_total) ;
+
+            _qoraal_instance->debug_print (buffer);
+        }
+        _qoraal_instance->debug_print (message);
+
+
+   }
+}
+
+
 // Debug allocation layout in memory:
 //
 //   [ size (4 bytes) | debugHeader (16 bytes) | HEAD (8 bytes) | userData (bytes) | TAIL (8 bytes) ]
@@ -152,7 +191,9 @@ heap_do_check(void* mem, int clear, const char* name, uint32_t line)
         // The first 4 bytes in this overhead store how big the user block is
         uint32_t bytes = *((uint32_t*)pmem);
         pmem += sizeof(uint32_t);
-
+#if defined CFG_OS_MEM_DEBUG_ENABLE
+        _malloc_total -= bytes ;
+#endif
 #if (DEBUG_SIZE_HEAD + DEBUG_HEADER + DEBUG_SIZE_TAIL)
         // If clear is requested, we zap the user data with a "dead" fill pattern
         // to make post-free usage more obvious. Optionally rewrite the debug header
@@ -205,6 +246,9 @@ heap_add_check(void* mem, uint32_t bytes, const char* name, uint32_t line)
     // Store the requested size for later reference
     *((uint32_t*)pmem) = bytes;
     pmem += sizeof(uint32_t);
+#if defined CFG_OS_MEM_DEBUG_ENABLE
+    _malloc_total += bytes ;
+#endif
 
 #if (DEBUG_SIZE_HEAD + DEBUG_HEADER + DEBUG_SIZE_TAIL)
     // Optionally store the line/name in a short debug header

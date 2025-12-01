@@ -1,6 +1,7 @@
 # Collect all test source files
 set(TEST_SRCS
     main.c
+    platform.c
     services/demo.c
     services/system.c
 )
@@ -13,6 +14,7 @@ target_compile_definitions(qoraal PRIVATE CFG_OS_POSIX)
 
 # Add the executable target
 add_executable(qoraal_test ${TEST_SRCS})
+target_compile_definitions(qoraal_test PRIVATE CFG_OS_POSIX)
 target_compile_options(qoraal_test PRIVATE -O0 -g)
 # Link the qoraal library and pthread
 if(WIN32)

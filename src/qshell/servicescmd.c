@@ -21,6 +21,8 @@
     SOFTWARE.
  */
 
+ #include "qoraal/config.h"
+#if CFG_QSHELL_SERVICES_ENABLE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -265,16 +267,12 @@ qshell_cmd_dmesg (SVC_SHELL_IF_T * pif, char** argv, int argc)
 }
 #endif
 
-void
-keep_servicescmds (void)
+/* This function exists only to force this module into any final binary
+ * that wants shell commands. It does nothing at runtime.
+ */
+void svc_shell_servicescmds_force_link(void)
 {
-    (void)qshell_cmd_ctrl ;
-    (void)qshell_cmd_logmsg ;
-    (void)qshell_cmd_sleep ;
-    (void)qshell_cmd_cls ;
-#if !defined CFG_COMMON_MEMLOG_DISABLE
-    (void)qshell_cmd_dmesg ;
-#endif    
+    /* intentionally empty */
 }
 
-
+#endif

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "qoraal/qoraal.h"
+#include "qoraal/platform.h"
 #include "qoraal/svc/svc_events.h"
 #include "qoraal/svc/svc_tasks.h"
 #include "qoraal/svc/svc_logger.h"
@@ -11,8 +12,8 @@
 #include "qoraal/svc/svc_shell.h"
 #include "qoraal/common/mlog.h"
 #include "services/services.h"
-#include "qoraal/example/console.h"
-#include "qoraal/example/platform.h"
+#include "qoraal/qshell/console.h"
+
 
 /*===========================================================================*/
 /* Macros and Defines                                                        */

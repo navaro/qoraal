@@ -1,4 +1,4 @@
-
+// #define CFG_OS_ZEPHYR    1
 /* CFG_DEBUG_SVC_LOGGER_DISABLE
     If defined, the logger service will not use svc_logger to route debug logging.
 */
@@ -52,7 +52,23 @@
 */
 // #define CFG_OS_MEM_DEBUG_ENABLE        1
 
-/* CFG_PLATFORM_ENABLE_WS2
-    If defined, the platform does initialisatin for ws2 (windows) sockets
+/* CFG_OS_MALLOC_DEBUG_ENABLE
+    If defined, the platform prepends heap information to all debug messages.
 */
-// #define CFG_PLATFORM_ENABLE_WS2        1
+#define CFG_OS_MALLOC_DEBUG_ENABLE        1
+
+
+/* CFG_QSHELL_CONSOLE_ENABLE
+    If defined, a console is included in the build
+*/
+#define CFG_QSHELL_CONSOLE_ENABLE       1
+
+/* CFG_QSHELL_CONSOLE_ENABLE
+    If defined, a filesystem shell is included in the build
+*/
+#define CFG_QSHELL_FS_ENABLE            1
+
+/* CFG_QSHELL_SERVICES_ENABLE
+    If defined, a services shell is included in the build
+*/
+#define CFG_QSHELL_SERVICES_ENABLE       1
