@@ -24,7 +24,7 @@
 #if defined _WIN32 && defined CFG_OS_POSIX
 #include <winsock2.h>
 #endif
-#include "platform.h"
+#include "qoraal/platform.h"
 #include "qoraal/common/rtclib.h"
 #include "qoraal/common/dictionary.h"
 
