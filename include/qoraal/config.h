@@ -50,7 +50,7 @@
 /* CFG_OS_MEM_DEBUG_ENABLE
     If defined, the platform does aditioanl checking an memory allocations
 */
-#define CFG_OS_MEM_DEBUG_ENABLE        1
+// #define CFG_OS_MEM_DEBUG_ENABLE        1
 
 /* CFG_OS_MALLOC_DEBUG_ENABLE
     If defined, the platform prepends heap information to all debug messages.
