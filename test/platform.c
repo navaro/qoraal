@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#if defined _WIN32 && defined CFG_PLATFORM_ENABLE_WS2
+#if defined _WIN32 && defined CFG_OS_POSIX
 #include <winsock2.h>
 #endif
 #include "platform.h"
@@ -41,7 +41,7 @@ platform_init (uint32_t flash_size)
 int32_t         
 platform_start ()
 {
-#if defined _WIN32 && defined CFG_PLATFORM_ENABLE_WS2
+#if defined _WIN32 && defined CFG_OS_POSIX
     // Initialize Winsock if on Windows
     WSADATA wsaData;
     int ret = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -62,7 +62,7 @@ int32_t
 platform_stop ()
 {
     platform_free (QORAAL_HeapAuxiliary, _platform_flash) ;
-#if defined _WIN32 && defined CFG_PLATFORM_ENABLE_WS2
+#if defined _WIN32 && defined CFG_OS_POSIX
      WSACleanup();
 #endif
     return 0 ;

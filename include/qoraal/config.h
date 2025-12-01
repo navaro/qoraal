@@ -57,10 +57,6 @@
 */
 #define CFG_OS_MALLOC_DEBUG_ENABLE        1
 
-/* CFG_PLATFORM_ENABLE_WS2
-    If defined, the platform does initialisatin for ws2 (windows) sockets
-*/
-// #define CFG_PLATFORM_ENABLE_WS2        1
 
 /* CFG_QSHELL_CONSOLE_ENABLE
     If defined, a console is included in the build
