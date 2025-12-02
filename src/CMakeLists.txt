@@ -6,6 +6,8 @@ set(QORAAL_SRCS
     os_posix.c
     os_zephyr.c
     os.c
+    qfs_posix.c
+    qfs_zephyr.c
     svc/svc_events.c
     svc/svc_logger.c
     svc/svc_services.c
@@ -21,8 +23,6 @@ set(QORAAL_SRCS
     common/rtclib.c
     common/strsub.c
     qshell/console.c
-    qshell/qfs_port_posix.c
-    qshell/qfs_port_zephyr.c
     qshell/fscmds.c
     qshell/servicescmd.c
 )

@@ -1,7 +1,7 @@
 #include "qoraal/config.h"
 #if defined CFG_OS_POSIX
 #include "qoraal/qoraal.h"
-#include "qoraal/qfs_port.h"
+#include "qoraal/qfs.h"
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/stat.h>

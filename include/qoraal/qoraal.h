@@ -25,6 +25,7 @@
 #define __QORAAL_H__
 #include <stdint.h>
 #include <stddef.h>
+#include <stdio.h>
 #include "qoraal/config.h"
 #include "qoraal/os.h"
 #include "qoraal/errordef.h"
@@ -58,10 +59,16 @@ typedef struct {
     void (*free) (QORAAL_HEAP heap, void *mem);
 
     /**
-     * @brief Print a debug message.
+     * @brief Print a message to the console.
      * @param message The debug string to print.
      */
     void (*debug_print) (const char *message);
+
+    /**
+     * @brief Print a message to the console.
+     * @param message The debug string to print.
+     */
+    int32_t (*debug_getch) (uint32_t timeout_ms);
 
     /**
      * @brief Assert with a debug message.
@@ -115,6 +122,10 @@ void qoraal_debug_print (const char *message) ;
 //static inline void qoraal_debug_print (const char *message) {
 //    if (_qoraal_instance && _qoraal_instance->debug_print) _qoraal_instance->debug_print (message);
 //}
+static inline int32_t qoraal_debug_getch (uint32_t timeout_ms) {
+    if (_qoraal_instance && _qoraal_instance->debug_print) return _qoraal_instance->debug_getch (timeout_ms);
+    return EOF ;
+}
 
 static inline void qoraal_debug_assert (const char *message) {
     if (_qoraal_instance && _qoraal_instance->debug_assert) _qoraal_instance->debug_assert (message);

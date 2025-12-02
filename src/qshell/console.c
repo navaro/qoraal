@@ -27,7 +27,7 @@
 #include "qoraal/qoraal.h"
 #include "qoraal/svc/svc_services.h"
 #include "qoraal/svc/svc_shell.h"
-#include "console.h"
+#include "qoraal/qshell/console.h"
 
 
 /*===========================================================================*/
@@ -121,11 +121,9 @@ console_service_ctrl (uint32_t code, uintptr_t arg)
 int32_t
 console_print (const char* str)
 {
-#if defined CFG_OS_POSIX
-        printf (str) ;
+        qoraal_debug_print (str) ;
 
-#endif
-#if defined CFG_OS_ZEPHYR
+#if  0 // defined CFG_OS_ZEPHYR
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 	if (device_is_ready(cons)) {
 		console_write (str, strlen(str), 500) ;
@@ -188,18 +186,11 @@ console_service_run (uintptr_t arg)
 int32_t
 console_out (void* ctx, uint32_t out, const char* str)
 {
-#if defined CFG_OS_POSIX
     if (str && (out && out < SVC_SHELL_IN_STD)) {
-        printf ("%s", str) ;
+        qoraal_debug_print (str) ;
 
     }
-#endif
-#if defined CFG_OS_ZEPHYR
-    if (str && (out && out < SVC_SHELL_IN_STD)) {
-    	console_write (str, strlen(str), 500) ;
 
-    }
-#endif
     return  SVC_SHELL_CMD_E_OK ;
 }
 
@@ -216,43 +207,27 @@ int32_t
 console_get_line (char * buffer, uint32_t len)
 {
     uint32_t i = 0 ;
-#if defined CFG_OS_POSIX
-    for (i=0; i<len; i++) {
-        int c = getc(stdin);
+
+    for (i=0; i<len; ) {
+        int c = qoraal_debug_getch(1000);
 
         if (_shell_exit) break;
 
-        if (c == EOF) {
-            // If EOF is due to `/dev/null`, prevent infinite loop
+
+        if (c <= 0) {
             os_thread_sleep (1000);
             continue;
         }
-
-        if (c == '\n') break;
+        if (c == '\r') c = '\n';   // normalize Windows to Unix
         buffer[i] = (char)c;
-
-    }
-#else
-    for (i=0; i<len; ) {
-        int c = console_get_char(1000);
-
-        if (_shell_exit) break;
-
-        if (c < 0) {
-            continue;
-        }
-
-        buffer[i] = (char)c;
-        console_write (&buffer[i],1, 50) ;
+        buffer[i+1] = 0 ;
+        // qoraal_debug_print (&buffer[i]) ;
         i++;
         if (c == '\n') break;
 
 
     }
 
-
-
-#endif
     return i ;
 }
 
@@ -268,20 +243,8 @@ console_get_line (char * buffer, uint32_t len)
 void
 console_logger_cb (void* channel, LOGGER_TYPE_T type, uint8_t facility, const char* msg)
 {
-#if defined CFG_OS_POSIX    
-    printf("--- %s\n", msg) ;
-#endif
-#if defined CFG_OS_ZEPHYR
-	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
-	if (device_is_ready(cons)) {
-        //console_write (msg, strlen(msg), 500) ;
-        //console_write ("\r\n", strlen("\r\n"), 500) ;
-
-        qoraal_debug_print (msg) ;
-        qoraal_debug_print ("\r\n") ;
-
-	}
-#endif
+    qoraal_debug_print(msg) ;
+    qoraal_debug_print ("\r\n") ;
 }
 
 typedef struct {

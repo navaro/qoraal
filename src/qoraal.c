@@ -158,7 +158,7 @@ qoraal_debug_print (const char *message)
    if (_qoraal_instance && _qoraal_instance->debug_print) {
         if (message[0] != '\r' && message[0] != '\n') {
             char buffer[32] ;
-            snprintf (buffer, sizeof(buffer), "%.4d  - ", _malloc_total) ;
+            snprintf (buffer, sizeof(buffer), "[%5d] ", _malloc_total) ;
 
             _qoraal_instance->debug_print (buffer);
         }

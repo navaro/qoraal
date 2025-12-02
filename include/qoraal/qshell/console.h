@@ -54,6 +54,9 @@ extern "C" {
     extern int32_t      console_service_run (uintptr_t arg) ;
     extern void         console_wait_for_exit (SVC_SERVICES_T  id) ;
 
+
+
+
 #ifdef __cplusplus
 }
 #endif
