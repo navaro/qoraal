@@ -1,20 +1,25 @@
+
 /*
- *  Copyright (C) 2015-2025, Navaro, All Rights Reserved
- *  SPDX-License-Identifier: Apache-2.0
- *
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may
- *  not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- *  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- *  This file is part of CORAL Connect (https://navaro.nl)
+    Copyright (C) 2015-2025, Navaro, All Rights Reserved
+    SPDX-License-Identifier: MIT
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
  */
 
  #include "qoraal/config.h"
@@ -54,7 +59,6 @@ static int32_t  console_get_line (char * buffer, uint32_t len) ;
 SVC_SHELL_CMD_DECL("exit", qshell_cmd_exit, "");
 SVC_SHELL_CMD_DECL("version", qshell_cmd_version, "");
 SVC_SHELL_CMD_DECL("hello", qshell_cmd_hello, "");
-SVC_SHELL_CMD_DECL("dbg", qshell_cmd_dbg, "");
 
 
 
@@ -91,10 +95,10 @@ console_service_ctrl (uint32_t code, uintptr_t arg)
 
     switch (code) {
     case SVC_SERVICE_CTRL_INIT:
-#if defined CFG_OS_POSIX
+
         extern void svc_shell_fscmds_force_link (void) ;
         svc_shell_fscmds_force_link () ;
-#endif
+
         _console_service_id = svc_service_service ((SCV_SERVICE_HANDLE) arg ) ;
         break ;
 
@@ -333,21 +337,5 @@ qshell_cmd_exit (SVC_SHELL_IF_T * pif, char** argv, int argc)
     return SVC_SHELL_CMD_E_OK ;
 }
 
-/**
- * @brief       qshell_cmd_exit
- * @details     Exits the shell service.
- *
- * @param[in]   pif     Shell interface pointer.
- * @param[in]   argv    Command-line arguments.
- * @param[in]   argc    Number of command-line arguments.
- *
- * @return      status  The result of the command execution.
- */
-int32_t
-qshell_cmd_dbg (SVC_SHELL_IF_T * pif, char** argv, int argc)
-{
-    qoraal_debug_print (" \r\n") ;
-    return SVC_SHELL_CMD_E_OK ;
-}
 
 #endif

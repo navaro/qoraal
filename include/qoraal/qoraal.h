@@ -117,11 +117,11 @@ int32_t     qoraal_svc_init (SVC_SERVICE_T * list) ;
 void *      qoraal_malloc (QORAAL_HEAP heap, size_t size) ;
 void        qoraal_free (QORAAL_HEAP heap, void *mem) ;
 
-void qoraal_debug_print (const char *message) ;
-
+void        qoraal_debug_print (const char *message) ;
 //static inline void qoraal_debug_print (const char *message) {
 //    if (_qoraal_instance && _qoraal_instance->debug_print) _qoraal_instance->debug_print (message);
 //}
+
 static inline int32_t qoraal_debug_getch (uint32_t timeout_ms) {
     if (_qoraal_instance && _qoraal_instance->debug_print) return _qoraal_instance->debug_getch (timeout_ms);
     return EOF ;
