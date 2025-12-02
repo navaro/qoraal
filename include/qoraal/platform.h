@@ -103,6 +103,12 @@ void platform_free(QORAAL_HEAP heap, void *mem);
 void platform_print(const char *format);
 
 /**
+ * @brief       Reads a a character from the console.
+ * @param[in]   format  Formatted string to be printed.
+ */
+int32_t platform_getch(uint32_t timeout_ms);
+
+/**
  * @brief       Triggers an assertion failure and aborts execution.
  * @param[in]   format  Formatted assertion failure message.
  */

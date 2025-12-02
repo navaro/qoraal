@@ -38,7 +38,7 @@
 #error "CFG_OS_CHIBIOS, CFG_OS_FREERTOS, CFG_OS_THREADX, CFG_OS_POSIX or CFG_OS_ZEPHYR must be defined when compiling qoraal"
 #endif
 
-extern void svc_shell_servicescmds_force_link (void) ;
+
 
 
 const QORAAL_CFG_T * _qoraal_instance = 0 ;
@@ -76,7 +76,10 @@ qoraal_init_default (const QORAAL_CFG_T * instance, SVC_SERVICE_T * list)
         svc_service_services_init (list) ;
     }
 
+#if CFG_QSHELL_SERVICES_ENABLE
+    extern void svc_shell_servicescmds_force_link (void) ;
     svc_shell_servicescmds_force_link () ;
+#endif
     
     return EOK ;
 }
@@ -158,7 +161,7 @@ qoraal_debug_print (const char *message)
    if (_qoraal_instance && _qoraal_instance->debug_print) {
         if (message[0] != '\r' && message[0] != '\n') {
             char buffer[32] ;
-            snprintf (buffer, sizeof(buffer), "%.4d  - ", _malloc_total) ;
+            snprintf (buffer, sizeof(buffer), "[%5d] ", _malloc_total) ;
 
             _qoraal_instance->debug_print (buffer);
         }

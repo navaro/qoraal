@@ -36,7 +36,7 @@
 
 /*
     Shell commands (portable FS version)
-    Uses qfs_port.h to target either POSIX or Zephyr (LittleFS at /lfs).
+    Uses qfs.h to target either POSIX or Zephyr (LittleFS at /lfs).
 
     Copyright (C) 2015-2025, Navaro
     SPDX-License-Identifier: MIT
@@ -46,7 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "qoraal/qfs_port.h"
+#include "qoraal/qfs.h"
 #include "qoraal/svc/svc_shell.h"
 
 /* -------------------------------------------------------------------------- */

@@ -1,20 +1,25 @@
+
 /*
- *  Copyright (C) 2015-2025, Navaro, All Rights Reserved
- *  SPDX-License-Identifier: Apache-2.0
- *
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may
- *  not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- *  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- *  This file is part of CORAL Connect (https://navaro.nl)
+    Copyright (C) 2015-2025, Navaro, All Rights Reserved
+    SPDX-License-Identifier: MIT
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
  */
 
  #include "qoraal/config.h"
@@ -27,7 +32,7 @@
 #include "qoraal/qoraal.h"
 #include "qoraal/svc/svc_services.h"
 #include "qoraal/svc/svc_shell.h"
-#include "console.h"
+#include "qoraal/qshell/console.h"
 
 
 /*===========================================================================*/
@@ -54,7 +59,6 @@ static int32_t  console_get_line (char * buffer, uint32_t len) ;
 SVC_SHELL_CMD_DECL("exit", qshell_cmd_exit, "");
 SVC_SHELL_CMD_DECL("version", qshell_cmd_version, "");
 SVC_SHELL_CMD_DECL("hello", qshell_cmd_hello, "");
-SVC_SHELL_CMD_DECL("dbg", qshell_cmd_dbg, "");
 
 
 
@@ -91,10 +95,10 @@ console_service_ctrl (uint32_t code, uintptr_t arg)
 
     switch (code) {
     case SVC_SERVICE_CTRL_INIT:
-#if defined CFG_OS_POSIX
+
         extern void svc_shell_fscmds_force_link (void) ;
         svc_shell_fscmds_force_link () ;
-#endif
+
         _console_service_id = svc_service_service ((SCV_SERVICE_HANDLE) arg ) ;
         break ;
 
@@ -121,11 +125,9 @@ console_service_ctrl (uint32_t code, uintptr_t arg)
 int32_t
 console_print (const char* str)
 {
-#if defined CFG_OS_POSIX
-        printf (str) ;
+        qoraal_debug_print (str) ;
 
-#endif
-#if defined CFG_OS_ZEPHYR
+#if  0 // defined CFG_OS_ZEPHYR
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 	if (device_is_ready(cons)) {
 		console_write (str, strlen(str), 500) ;
@@ -188,18 +190,11 @@ console_service_run (uintptr_t arg)
 int32_t
 console_out (void* ctx, uint32_t out, const char* str)
 {
-#if defined CFG_OS_POSIX
     if (str && (out && out < SVC_SHELL_IN_STD)) {
-        printf ("%s", str) ;
+        qoraal_debug_print (str) ;
 
     }
-#endif
-#if defined CFG_OS_ZEPHYR
-    if (str && (out && out < SVC_SHELL_IN_STD)) {
-    	console_write (str, strlen(str), 500) ;
 
-    }
-#endif
     return  SVC_SHELL_CMD_E_OK ;
 }
 
@@ -216,43 +211,27 @@ int32_t
 console_get_line (char * buffer, uint32_t len)
 {
     uint32_t i = 0 ;
-#if defined CFG_OS_POSIX
-    for (i=0; i<len; i++) {
-        int c = getc(stdin);
+
+    for (i=0; i<len; ) {
+        int c = qoraal_debug_getch(1000);
 
         if (_shell_exit) break;
 
-        if (c == EOF) {
-            // If EOF is due to `/dev/null`, prevent infinite loop
+
+        if (c <= 0) {
             os_thread_sleep (1000);
             continue;
         }
-
-        if (c == '\n') break;
+        if (c == '\r') c = '\n';   // normalize Windows to Unix
         buffer[i] = (char)c;
-
-    }
-#else
-    for (i=0; i<len; ) {
-        int c = console_get_char(1000);
-
-        if (_shell_exit) break;
-
-        if (c < 0) {
-            continue;
-        }
-
-        buffer[i] = (char)c;
-        console_write (&buffer[i],1, 50) ;
+        buffer[i+1] = 0 ;
+        // qoraal_debug_print (&buffer[i]) ;
         i++;
         if (c == '\n') break;
 
 
     }
 
-
-
-#endif
     return i ;
 }
 
@@ -268,20 +247,8 @@ console_get_line (char * buffer, uint32_t len)
 void
 console_logger_cb (void* channel, LOGGER_TYPE_T type, uint8_t facility, const char* msg)
 {
-#if defined CFG_OS_POSIX    
-    printf("--- %s\n", msg) ;
-#endif
-#if defined CFG_OS_ZEPHYR
-	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
-	if (device_is_ready(cons)) {
-        //console_write (msg, strlen(msg), 500) ;
-        //console_write ("\r\n", strlen("\r\n"), 500) ;
-
-        qoraal_debug_print (msg) ;
-        qoraal_debug_print ("\r\n") ;
-
-	}
-#endif
+    qoraal_debug_print(msg) ;
+    qoraal_debug_print ("\r\n") ;
 }
 
 typedef struct {
@@ -370,21 +337,5 @@ qshell_cmd_exit (SVC_SHELL_IF_T * pif, char** argv, int argc)
     return SVC_SHELL_CMD_E_OK ;
 }
 
-/**
- * @brief       qshell_cmd_exit
- * @details     Exits the shell service.
- *
- * @param[in]   pif     Shell interface pointer.
- * @param[in]   argv    Command-line arguments.
- * @param[in]   argc    Number of command-line arguments.
- *
- * @return      status  The result of the command execution.
- */
-int32_t
-qshell_cmd_dbg (SVC_SHELL_IF_T * pif, char** argv, int argc)
-{
-    qoraal_debug_print (" \r\n") ;
-    return SVC_SHELL_CMD_E_OK ;
-}
 
 #endif
