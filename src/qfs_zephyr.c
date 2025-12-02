@@ -1,6 +1,6 @@
 #include "qoraal/config.h"
 #if defined CFG_OS_ZEPHYR
-#include "qoraal/qfs_port.h"
+#include "qoraal/qfs.h"
 #include "qoraal/qoraal.h"
 #include <zephyr/fs/fs.h>
 #include <string.h>
