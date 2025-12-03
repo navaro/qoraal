@@ -30,9 +30,4 @@ set(QORAAL_SRCS
 # Add the library target
 add_library(qoraal STATIC ${QORAAL_SRCS})
 
-# Link necessary libraries
-target_link_libraries(qoraal pthread)
-
-# Set compile-time definitions for the qoraal target
-# target_compile_definitions(qoraal PRIVATE CFG_OS_POSIX)
 
