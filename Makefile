@@ -1,5 +1,5 @@
 MKDIR = mkdir -p build
-EXECUTABLE = ./build/src/tictactoe
+EXECUTABLE = ./build/test/qoraal_test
 RM = rm -rf
 
 .PHONY: all build run clean
