@@ -127,13 +127,6 @@ console_print (const char* str)
 {
         qoraal_debug_print (str) ;
 
-#if  0 // defined CFG_OS_ZEPHYR
-	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
-	if (device_is_ready(cons)) {
-		console_write (str, strlen(str), 500) ;
-
-	}
-#endif
     return  SVC_SHELL_CMD_E_OK ;
 }
 
@@ -219,7 +212,7 @@ console_get_line (char * buffer, uint32_t len)
 
 
         if (c <= 0) {
-            os_thread_sleep (1000);
+            if (c == EOF) os_thread_sleep (1000);
             continue;
         }
         if (c == '\r') c = '\n';   // normalize Windows to Unix

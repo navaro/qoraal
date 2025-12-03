@@ -21,7 +21,7 @@
     SOFTWARE.
 */
 
-
+#include <strings.h>
 #include "qoraal/config.h"
 #include "qoraal/qoraal.h"
 #include "qoraal/common/lists.h"

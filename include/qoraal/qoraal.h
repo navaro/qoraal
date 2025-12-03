@@ -123,7 +123,7 @@ void        qoraal_debug_print (const char *message) ;
 //}
 
 static inline int32_t qoraal_debug_getch (uint32_t timeout_ms) {
-    if (_qoraal_instance && _qoraal_instance->debug_print) return _qoraal_instance->debug_getch (timeout_ms);
+    if (_qoraal_instance && _qoraal_instance->debug_getch) return _qoraal_instance->debug_getch (timeout_ms);
     return EOF ;
 }
 
