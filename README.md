@@ -90,14 +90,9 @@ Feed from services or tasks → avoid random device resets.
 1. Open a Codespace or your local environment.
 2. Run:
 
-   **Windows**
+   **Windows/Linux/macOS/Github Codespace**
    ```
-   build_and_run.bat
-   ```
-
-   **Linux/macOS**
-   ```
-   ./build_and_run.sh
+   make all
    ```
 
 3. When the shell appears:
