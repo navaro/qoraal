@@ -30,4 +30,6 @@ set(QORAAL_SRCS
 # Add the library target
 add_library(qoraal STATIC ${QORAAL_SRCS})
 
+# Set target include dirs
+target_include_directories(qoraal PUBLIC ${PROJECT_SOURCE_DIR}/include)
 
