@@ -26,6 +26,31 @@ void qfs_dir_close(qfs_dir_t *d);
 // Reads whole file into malloc buffer; returns size or <0 on error.
 int  qfs_read_all(const char *path, char **out_buf);
 
+// Opaque file handle for streaming operations
+typedef struct qfs_file qfs_file_t;
+
+/**
+ * Open file for writing (create or truncate).
+ *
+ * `flags` is reserved for future extensions (e.g. read/append).
+ * It is currently ignored by all backends and should be 0.
+ *
+ * Returns 0 on success, <0 on error.
+ */
+int qfs_open(qfs_file_t **out, const char *path, int flags);
+
+/**
+ * Write data to an open file handle.
+ * Returns number of bytes written, or <0 on error.
+ */
+int qfs_write(qfs_file_t *f, const void *buf, size_t len);
+
+/**
+ * Close file and free handle resources.
+ * Returns 0 on success, <0 on error.
+ */
+int qfs_close(qfs_file_t *f);
+
 // PWD/CD abstraction (Zephyr doesn’t have process cwd: we keep a static cwd)
 int  qfs_chdir(const char *path);
 const char *qfs_getcwd(void);
@@ -40,7 +65,6 @@ int qfs_rmdir (const char *path);     // 0 on success, <0 on error (optional; fo
 // Simple portable wildcard match supporting '*' and '?'.
 // Returns: 1 = match, 0 = no match.
 int qfs_match(const char *pattern, const char *name);
-
 
 int qfs_mkdir(const char *path) ;
 

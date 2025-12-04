@@ -15,6 +15,8 @@
 
 struct qfs_dir { DIR *dp; };
 
+struct qfs_file { FILE *fp; };
+
 int qfs_dir_open(qfs_dir_t **out, const char *path) {
     DIR *dp = opendir(path ? path : ".");
     if (!dp) return -1;
@@ -24,19 +26,21 @@ int qfs_dir_open(qfs_dir_t **out, const char *path) {
         return -1;
     }
     (*out)->dp = dp;
-    return 1;
+    return 0;
 }
 
 int qfs_dir_read(qfs_dir_t *d, qfs_dirent_t *e) {
+    if (!d || !e) return -1;
     struct dirent *de = readdir(d->dp);
-    if (!de) return 0;
+    if (!de) return 0; // end
 
-    strncpy(e->name, de->d_name, sizeof(e->name) - 1);
-    e->name[sizeof(e->name) - 1] = 0;
+    strncpy(e->name, de->d_name, sizeof(e->name)-1);
+    e->name[sizeof(e->name)-1] = 0;
 
-    /* Not all platforms provide d_type / DT_DIR (e.g. some MinGW dirent.h). */
-#ifdef DT_DIR
-    e->is_dir = (de->d_type == DT_DIR) ? 1 : 0;
+#if defined(_DIRENT_HAVE_D_TYPE)
+    if (de->d_type == DT_DIR)      e->is_dir = 1;
+    else if (de->d_type == DT_REG) e->is_dir = 0;
+    else                           e->is_dir = -1;
 #else
     /* Fallback: we don’t know, so report “not a dir”. Callers should
        tolerate this on platforms without d_type. */
@@ -95,12 +99,71 @@ int qfs_read_all(const char *path, char **out_buf) {
 
 static char cwd_buf[256];
 
+int qfs_open(qfs_file_t **out, const char *path, int flags)
+{
+    (void)flags;
+    if (!out || !path) return -EINVAL;
+    *out = NULL;
+
+    FILE *fp = fopen(path, "wb");
+    if (!fp) {
+        return -errno;
+    }
+
+    qfs_file_t *h = qoraal_malloc(QORAAL_HeapAuxiliary, sizeof(*h));
+    if (!h) {
+        fclose(fp);
+        return -ENOMEM;
+    }
+
+    h->fp = fp;
+    *out  = h;
+    return 0;
+}
+
+int qfs_write(qfs_file_t *f, const void *buf, size_t len)
+{
+    if (!f || !f->fp || !buf) return -EINVAL;
+
+    size_t n = fwrite(buf, 1, len, f->fp);
+    if (n == len) {
+        return (int)n;
+    }
+
+    if (ferror(f->fp)) {
+        return -EIO;
+    }
+
+    /* Short write without ferror() set – unusual, but report bytes written. */
+    return (int)n;
+}
+
+int qfs_close(qfs_file_t *f)
+{
+    if (!f) return 0;
+
+    int rc = 0;
+    if (f->fp) {
+        rc = fclose(f->fp);
+        if (rc != 0) {
+            rc = -errno;
+        }
+        f->fp = NULL;
+    }
+
+    qoraal_free(QORAAL_HeapAuxiliary, f);
+    return rc;
+}
+
 int qfs_chdir(const char *path) {
     return chdir(path);
 }
 
 const char *qfs_getcwd(void) {
-    return getcwd(cwd_buf, sizeof(cwd_buf));
+    if (!getcwd(cwd_buf, sizeof(cwd_buf))) {
+        cwd_buf[0] = 0;
+    }
+    return cwd_buf;
 }
 
 int qfs_make_abs(char *out, size_t out_sz, const char *in) {
@@ -123,55 +186,45 @@ int qfs_make_abs(char *out, size_t out_sz, const char *in) {
 #endif
 
     const char *cwd = qfs_getcwd();
-    if (!cwd) return -1;
+    size_t cwd_len = strlen(cwd);
+    size_t in_len  = strlen(in);
 
+    if (cwd_len + 1 + in_len + 1 > out_sz) return -1;
+    memcpy(out, cwd, cwd_len);
 #ifdef _WIN32
-    int n = snprintf(out, out_sz, "%s\\%s", cwd, in);
+    out[cwd_len++] = '\\';
 #else
-    int n = snprintf(out, out_sz, "%s/%s", cwd, in);
+    out[cwd_len++] = '/';
 #endif
-    return (n < 0 || (size_t)n >= out_sz) ? -1 : 0;
+    memcpy(out + cwd_len, in, in_len + 1);
+    return 0;
 }
 
 int qfs_unlink(const char *path) {
-    return (remove(path) == 0) ? 0 : -errno;
+    int rc = unlink(path);
+    if (rc == 0) return 0;
+    if (errno == ENOENT) return 0;
+    return -errno;
 }
 
 int qfs_rmdir(const char *path) {
-    return (rmdir(path) == 0) ? 0 : -errno;
-}
-
-// Simple fallback wildcard matcher for Windows (supports * and ?)
-static int simple_match(const char *pattern, const char *name) {
-    const char *p = pattern;
-    const char *n = name;
-    const char *star = NULL;
-    const char *retry = NULL;
-
-    while (*n) {
-        if (*p == '*') {
-            star = p++;
-            retry = n;
-        } else if (*p == '?' || *p == *n) {
-            p++;
-            n++;
-        } else if (star) {
-            p = star + 1;
-            n = ++retry;
-        } else {
-            return 0;
-        }
-    }
-
-    while (*p == '*') p++;
-    return (*p == '\0');
+    int rc = rmdir(path);
+    if (rc == 0) return 0;
+    if (errno == ENOENT) return 0;
+    return -errno;
 }
 
 int qfs_match(const char *pattern, const char *name) {
-#ifdef _WIN32
-    return simple_match(pattern, name);
+#if defined(_WIN32)
+    /* fnmatch isn’t standard on Windows; you can stub or implement a
+       simple matcher here if needed. For now: basic strcmp. */
+    (void)pattern;
+    (void)name;
+    // TODO: implement wildcard match on Windows if needed.
+    return strcmp(pattern, name) == 0;
 #else
-    return (fnmatch(pattern, name, 0) == 0);
+    int rc = fnmatch(pattern, name, 0);
+    return (rc == 0) ? 1 : 0;
 #endif
 }
 
@@ -186,4 +239,4 @@ int qfs_mkdir(const char *path)
     if (rc < 0 && errno == EEXIST) return 0;  /* ok if it already exists */
     return rc;
 }
-#endif /* CFG_OS_ZEPHYR */
+#endif /* CFG_OS_POSIX */
