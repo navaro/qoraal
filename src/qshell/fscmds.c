@@ -61,7 +61,7 @@ qshell_cmd_ls (SVC_SHELL_IF_T * pif, char** argv, int argc)
 
     qfs_dir_t *d = NULL;
     int rc = qfs_dir_open(&d, dir);
-    if (rc <= 0 || d == NULL) {
+    if (rc < 0 || d == NULL) {
         svc_shell_print(pif, SVC_SHELL_OUT_STD, "Unable to read directory\r\n");
         return SVC_SHELL_CMD_E_FAIL;
     }
