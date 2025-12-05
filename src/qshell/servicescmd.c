@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include "qoraal/config.h"
 #include "qoraal/qoraal.h"
 #include "qoraal/svc/svc_services.h"

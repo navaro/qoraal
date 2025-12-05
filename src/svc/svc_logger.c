@@ -291,7 +291,7 @@ svc_logger_vlogx (LOGGER_TYPE_T type, uint8_t facility, const char *format_str, 
     //static uint16_t id = 0 ;
 
 #if defined SERVICE_LOGGER_TASK && SERVICE_LOGGER_TASK
-    int32_t status ;
+    int32_t status = EOK;
 #endif
 
     if (_logger_debug_sending >= SVC_LOGGER_MAX_QUEUE_SIZE) {
