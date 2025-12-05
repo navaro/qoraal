@@ -33,3 +33,9 @@ add_library(qoraal STATIC ${QORAAL_SRCS})
 # Set target include dirs
 target_include_directories(qoraal PUBLIC ${PROJECT_SOURCE_DIR}/include)
 
+# --- Zephyr integration ---
+if (TARGET zephyr_interface)
+    message(STATUS "Qoraal: building with Zephyr support")
+    target_link_libraries(qoraal PUBLIC zephyr_interface)
+    target_compile_definitions(qoraal PUBLIC CFG_OS_ZEPHYR=1)
+endif()
