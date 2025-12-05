@@ -6,9 +6,9 @@
 
 ## What is Qoraal?
 
-Qoraal is a **flexible, event‑driven application framework** for embedded systems — structured where it matters, fluid where it helps.
+Qoraal is a **flexible, event‑driven application framework** for embedded systems, structured where it matters, fluid where it helps.
 
-It gives you a portable OS abstraction, a scalable task system, clean service management, logging, shell support, and watchdog handling — all designed to keep embedded applications modular and sane across multiple RTOSes and POSIX environments.
+It gives you a portable OS abstraction, a scalable task system, clean service management, logging, shell support, and watchdog handling, all designed to keep embedded applications modular and sane across multiple RTOSes and POSIX environments.
 
 ---
 
