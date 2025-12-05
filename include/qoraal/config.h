@@ -49,7 +49,7 @@
 /* CFG_QFS_DISABLE
     If defined, the platform does not support qfs
 */
-#define CFG_QFS_DISABLE        1
+// #define CFG_QFS_DISABLE        1
 
 /* CFG_OS_MEM_DEBUG_ENABLE
     If defined, the platform does aditioanl checking an memory allocations
