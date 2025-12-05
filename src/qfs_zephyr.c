@@ -1,5 +1,5 @@
 #include "qoraal/config.h"
-#if defined CFG_OS_ZEPHYR
+#if defined CFG_OS_ZEPHYR && (!defined(CFG_QFS_DISABLE) || !CFG_QFS_DISABLE)
 #include "qoraal/qfs.h"
 #include "qoraal/qoraal.h"
 #include <zephyr/fs/fs.h>

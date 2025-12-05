@@ -1,5 +1,6 @@
 #include "qoraal/config.h"
-#if defined CFG_OS_POSIX
+#if defined CFG_OS_POSIX  && (!defined(CFG_QFS_DISABLE) || !CFG_QFS_DISABLE)
+
 #include "qoraal/qoraal.h"
 #include "qoraal/qfs.h"
 #include <dirent.h>

@@ -46,6 +46,10 @@
 */
 // #define CFG_OS_MLOCK_DISABLE        1
 
+/* CFG_QFS_DISABLE
+    If defined, the platform does not support qfs
+*/
+#define CFG_QFS_DISABLE        1
 
 /* CFG_OS_MEM_DEBUG_ENABLE
     If defined, the platform does aditioanl checking an memory allocations
@@ -66,7 +70,9 @@
 /* CFG_QSHELL_CONSOLE_ENABLE
     If defined, a filesystem shell is included in the build
 */
+#if !(defined CFG_QFS_DISABLE) || !CFG_QFS_DISABLE
 #define CFG_QSHELL_FS_ENABLE            1
+#endif
 
 /* CFG_QSHELL_SERVICES_ENABLE
     If defined, a services shell is included in the build

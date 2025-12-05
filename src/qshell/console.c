@@ -95,10 +95,10 @@ console_service_ctrl (uint32_t code, uintptr_t arg)
 
     switch (code) {
     case SVC_SERVICE_CTRL_INIT:
-
+#if !defined(CFG_QFS_DISABLE) || !CFG_QFS_DISABLE
         extern void svc_shell_fscmds_force_link (void) ;
         svc_shell_fscmds_force_link () ;
-
+#endif
         _console_service_id = svc_service_service ((SCV_SERVICE_HANDLE) arg ) ;
         break ;
 
