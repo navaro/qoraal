@@ -4,7 +4,7 @@ else
 	CMAKE = cmake .. -DCFG_OS_POSIX=1 -DBUILD_TESTS=ON
 endif
 MKDIR = mkdir -p build
-EXECUTABLE = ./build/test/qoraal_test
+EXECUTABLE = ./build/test/posix/qoraal_test
 RM = rm -rf
 
 .PHONY: all build run clean

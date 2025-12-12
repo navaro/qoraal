@@ -31,5 +31,5 @@ set(QORAAL_SRCS
 add_library(qoraal OBJECT ${QORAAL_SRCS})
 
 # Set target include dirs
-target_include_directories(qoraal PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_include_directories(qoraal PUBLIC ${CMAKE_CURRENT_LIST_DIR}/../include)
 
