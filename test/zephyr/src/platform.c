@@ -68,14 +68,13 @@ platform_free(QORAAL_HEAP heap, void *mem)
 void
 platform_print(const char *format)
 {
-    //console_write (format, strlen(format), 1000) ;
-   printk("%s", format);
+    console_write (0, format, strlen(format)) ;
 }
 
 int32_t 
 platform_getch (uint32_t timeout_ms)
 {
-    return console_getchar(); //console_get_char(timeout_ms);
+    return console_getchar(); 
 }
 
 void
