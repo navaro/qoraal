@@ -62,13 +62,13 @@ typedef struct {
      * @brief Print a message to the console.
      * @param message The debug string to print.
      */
-    void (*debug_print) (const char *message);
+    void (*print) (const char *message);
 
     /**
      * @brief Print a message to the console.
      * @param message The debug string to print.
      */
-    int32_t (*debug_getch) (uint32_t timeout_ms);
+    int32_t (*getch) (uint32_t timeout_ms);
 
     /**
      * @brief Assert with a debug message.
@@ -118,12 +118,12 @@ void *      qoraal_malloc (QORAAL_HEAP heap, size_t size) ;
 void        qoraal_free (QORAAL_HEAP heap, void *mem) ;
 
 void        qoraal_debug_print (const char *message) ;
-//static inline void qoraal_debug_print (const char *message) {
-//    if (_qoraal_instance && _qoraal_instance->debug_print) _qoraal_instance->debug_print (message);
-//}
+static inline void qoraal_print (const char *message) {
+    if (_qoraal_instance && _qoraal_instance->print) _qoraal_instance->print (message);
+}
 
-static inline int32_t qoraal_debug_getch (uint32_t timeout_ms) {
-    if (_qoraal_instance && _qoraal_instance->debug_getch) return _qoraal_instance->debug_getch (timeout_ms);
+static inline int32_t qoraal_getch (uint32_t timeout_ms) {
+    if (_qoraal_instance && _qoraal_instance->getch) return _qoraal_instance->getch (timeout_ms);
     return EOF ;
 }
 

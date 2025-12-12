@@ -30,7 +30,15 @@ SVC_SERVICE_RUN_DECL("shell",  console_service_run, console_service_ctrl, 0, 600
 SVC_SERVICE_DECL("demo", demo_service_ctrl, 0, QORAAL_SERVICE_DEMO, 0)
 SVC_SERVICE_LIST_END()
 
-static const QORAAL_CFG_T       _qoraal_cfg = { .malloc = platform_malloc, .free = platform_free, .debug_print = platform_print, .debug_getch = platform_getch, .debug_assert = platform_assert, .current_time = platform_current_time, .rand = platform_rand, .wdt_kick = platform_wdt_kick};
+static const QORAAL_CFG_T       _qoraal_cfg = { .malloc = platform_malloc, 
+    .free = platform_free, 
+    .print = platform_print, 
+    .getch = platform_getch, 
+    .debug_assert = platform_assert, 
+    .current_time = platform_current_time, 
+    .rand = platform_rand, 
+    .wdt_kick = platform_wdt_kick
+};
 
 /*===========================================================================*/
 /* Local Functions                                                           */

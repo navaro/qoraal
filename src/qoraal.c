@@ -158,14 +158,14 @@ uint32_t    _malloc_total = 0 ;
 void 
 qoraal_debug_print (const char *message) 
 {
-   if (_qoraal_instance && _qoraal_instance->debug_print) {
+   if (_qoraal_instance && _qoraal_instance->print) {
         if (message[0] != '\r' && message[0] != '\n') {
             char buffer[32] ;
             snprintf (buffer, sizeof(buffer), "[%5d] ", _malloc_total) ;
 
-            _qoraal_instance->debug_print (buffer);
+            _qoraal_instance->print (buffer);
         }
-        _qoraal_instance->debug_print (message);
+        _qoraal_instance->print (message);
 
 
    }

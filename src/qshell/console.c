@@ -40,6 +40,12 @@
 /*===========================================================================*/
 
 SVC_SERVICES_T      _console_service_id = SVC_SERVICES_INVALID ;   
+bool                _console_echo_on = 
+#if defined CFG_OS_POSIX 
+    false ;
+#else
+    true ; 
+#endif
 
 #define DBG_MESSAGE_SHELL(severity, fmt_str, ...)   DBG_MESSAGE_T_REPORT (SVC_LOGGER_TYPE(severity,0), _console_service_id, fmt_str, ##__VA_ARGS__)
 
@@ -208,7 +214,7 @@ int32_t console_get_line(char *buffer, uint32_t len)
     if (!buffer || len == 0) return 0;
 
     while (i + 1 < len) {
-        int c = qoraal_debug_getch(1000);
+        int c = qoraal_getch(1000);
 
         if (_shell_exit) break;
 
@@ -228,7 +234,7 @@ int32_t console_get_line(char *buffer, uint32_t len)
             if (i > 0) {
                 i--;
                 buffer[i] = 0;
-                printk("\b \b");   // erase visually
+                if (_console_echo_on) qoraal_print("\b \b");   // erase visually
             }
             continue;
         }
@@ -238,7 +244,7 @@ int32_t console_get_line(char *buffer, uint32_t len)
             swallow_lf = true;
             buffer[i++] = '\n';
             buffer[i] = 0;
-            printk("\r\n");
+            if (_console_echo_on) qoraal_print("\r\n");
             break;
         }
 
@@ -247,10 +253,10 @@ int32_t console_get_line(char *buffer, uint32_t len)
 
         /* echo */
         if (c == '\n') {
-            printk("\r\n");
+            if (_console_echo_on) qoraal_print("\r\n");
             break;
         } else {
-            printk("%c", c);
+            if (_console_echo_on) qoraal_print(&buffer[i-1]);
         }
     }
 
