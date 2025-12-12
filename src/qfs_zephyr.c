@@ -307,7 +307,7 @@ int qfs_match(const char *pattern, const char *name) {
     return match_simple(pattern, name) ? 1 : 0;
 }
 
-int qfs_makedir(const char *path)
+int qfs_mkdir(const char *path)
 {
     char full[QFS_PATH_MAX];
     int rc = make_path(full, sizeof(full), path);
