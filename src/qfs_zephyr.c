@@ -307,4 +307,68 @@ int qfs_match(const char *pattern, const char *name) {
     return match_simple(pattern, name) ? 1 : 0;
 }
 
+int qfs_makedir(const char *path)
+{
+    char full[QFS_PATH_MAX];
+    int rc = make_path(full, sizeof(full), path);
+    if (rc) return rc;
+
+    const size_t root_len = strlen(QFS_ROOT);
+
+    /* Nothing to do if they asked for the root itself. */
+    if (strcmp(full, QFS_ROOT) == 0) {
+        return 0;
+    }
+
+    /* Safety: make_path()/normalize_path() should already guarantee this. */
+    if (strncmp(full, QFS_ROOT, root_len) != 0) {
+        return -EINVAL;
+    }
+
+    /* Build incremental paths: "/lfs/a", "/lfs/a/b", ... */
+    char cur[QFS_PATH_MAX];
+    if (root_len + 1 > sizeof(cur)) return -ENAMETOOLONG;
+    memcpy(cur, QFS_ROOT, root_len);
+    cur[root_len] = '\0';
+
+    const char *s = full + root_len;
+
+    while (*s) {
+        while (*s == '/') s++;           /* skip slashes */
+        if (!*s) break;
+
+        const char *seg = s;
+        while (*s && *s != '/') s++;
+        size_t seglen = (size_t)(s - seg);
+
+        /* append "/" + segment to cur */
+        size_t cur_len = strlen(cur);
+        size_t need = cur_len + 1 + seglen + 1;
+        if (need > sizeof(cur)) return -ENAMETOOLONG;
+
+        if (cur_len == 0 || cur[cur_len - 1] != '/') {
+            cur[cur_len++] = '/';
+            cur[cur_len] = '\0';
+        }
+        memcpy(cur + cur_len, seg, seglen);
+        cur[cur_len + seglen] = '\0';
+
+        /* If it exists and is a dir -> ok. If missing -> mkdir it. */
+        struct fs_dirent st;
+        rc = fs_stat(cur, &st);
+        if (rc == 0) {
+            if (st.type != FS_DIR_ENTRY_DIR) {
+                return -ENOTDIR;
+            }
+        } else {
+            rc = fs_mkdir(cur);
+            if (rc != 0 && rc != -EEXIST) {
+                return rc; /* Zephyr FS APIs return negative errno on failure */
+            }
+        }
+    }
+
+    return 0;
+}
+
 #endif /*CFG_OS_ZEPHYR*/
