@@ -200,32 +200,61 @@ console_out (void* ctx, uint32_t out, const char* str)
  *
  * @return      length  The length of the input line.
  */
-int32_t
-console_get_line (char * buffer, uint32_t len)
+int32_t console_get_line(char *buffer, uint32_t len)
 {
-    uint32_t i = 0 ;
+    static bool swallow_lf = false;
+    uint32_t i = 0;
 
-    for (i=0; i<len; ) {
+    if (!buffer || len == 0) return 0;
+
+    while (i + 1 < len) {
         int c = qoraal_debug_getch(1000);
 
         if (_shell_exit) break;
 
-
         if (c <= 0) {
-            if (c == EOF) os_thread_sleep (1000);
+            if (c == EOF) os_thread_sleep(1000);
             continue;
         }
-        if (c == '\r') c = '\n';   // normalize Windows to Unix
-        buffer[i] = (char)c;
-        buffer[i+1] = 0 ;
-        // qoraal_debug_print (&buffer[i]) ;
-        i++;
-        if (c == '\n') break;
 
+        /* swallow LF after CR across calls */
+        if (swallow_lf) {
+            swallow_lf = false;
+            if (c == '\n') continue;
+        }
 
+        /* backspace (BS or DEL) */
+        if (c == '\b' || c == 0x7f) {
+            if (i > 0) {
+                i--;
+                buffer[i] = 0;
+                printk("\b \b");   // erase visually
+            }
+            continue;
+        }
+
+        /* end-of-line handling */
+        if (c == '\r') {
+            swallow_lf = true;
+            buffer[i++] = '\n';
+            buffer[i] = 0;
+            printk("\r\n");
+            break;
+        }
+
+        buffer[i++] = (char)c;
+        buffer[i] = 0;
+
+        /* echo */
+        if (c == '\n') {
+            printk("\r\n");
+            break;
+        } else {
+            printk("%c", c);
+        }
     }
 
-    return i ;
+    return (int32_t)i;
 }
 
 /**
