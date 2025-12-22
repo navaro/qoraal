@@ -1,32 +1,53 @@
 # Qoraal
 ### Embedded Application Framework  
-#### Zephyr • FreeRTOS • ThreadX • POSIX • ChibiOS  
+#### Zephyr • FreeRTOS • ThreadX • POSIX  
 
 ---
 
 ## What is Qoraal?
 
-Qoraal is a **flexible, event‑driven application framework** for embedded systems, structured where it matters, fluid where it helps.
+Qoraal is a **flexible, event-driven application framework** for embedded systems — structured where it matters, fluid where it helps.
 
-It gives you a portable OS abstraction, a scalable task system, clean service management, logging, shell support, and watchdog handling, all designed to keep embedded applications modular and sane across multiple RTOSes and POSIX environments.
+It gives you a portable OS abstraction, a scalable task system, clean service management, logging, shell support, and watchdog handling, designed to keep embedded applications modular and sane across multiple RTOSes or POSIX environments.
 
 ---
 
-## Supported Environments
+## Philosophy
 
+Embedded projects don’t usually fail because someone cant write a driver.  
+They fail slowly, from entropy.
+
+Qoraal is built around a few simple beliefs:
+
+- **Events over spaghetti:** make "what happened" explicit.
+- **Services with lifecycles:** init/start/stop beats "some global init order."
+- **Portable by design:** the OS port is a boundary, not an afterthought.
+- **Small, predictable primitives:** boring on purpose but reliable in production.
+- **No framework religion:** you can adopt it piece-by-piece and keep your own style.
+
+Qoraal's goal is not to be clever, it’s to keep your system **coherent** as it grows.
+
+---
+
+## Supported environments
+
+### Verified (actively tested)
 - **Zephyr**
 - **FreeRTOS**
 - **ThreadX / Azure RTOS**
-- **ChibiOS**
-- **POSIX (Linux, macOS, Windows/MinGW)**
+- **POSIX** (Linux, macOS, Windows/MinGW)
 
-Write once. Build anywhere.
+### Legacy (previously supported)
+- **ChibiOS** 
+
+> "Write once. Build anywhere." — within the boundaries above.  
+> If you run Qoraal on a new target and it holds up, open an issue/PR with the RTOS, toolchain, and board/host details.
 
 ---
 
-## Main Components
+## Main components
 
-### **OS Abstraction Layer**
+### OS abstraction layer
 Portable API for:
 - Threads & priorities  
 - Mutexes, semaphores, events  
@@ -37,9 +58,9 @@ This is what allows Qoraal services to run unchanged on different OSes.
 
 ---
 
-### **Service Task System**
+### Service task system
 A lightweight task engine with:
-- Prioritized task queues  
+- Priority task queues 
 - Deferred work from interrupts  
 - Timed / delayed tasks  
 - Optional waitable tasks  
@@ -49,53 +70,54 @@ Perfect for systems that need responsiveness without chaos.
 
 ---
 
-### **Service Management**
+### Service management
 Define services with clear lifecycles:
 
 - init → start → stop  
 - dependency ordering  
 - failure handling and restart logic  
 
-A simple structure that prevents big‑app entropy.
+A simple structure that prevents big-app entropy.
 
 ---
 
-### **Logging**
-- Channel‑based logging per module  
-- Pluggable backends (RTT, UART, POSIX stdout, Zephyr logging)  
-- Optimized for low‑resource systems  
+### Logging
+- Channel-based logging per module
+- Deferred logging using tasks
+- Pluggable log channels (RTT, UART, POSIX stdout, Zephyr logging, FLASH)  
+- Optimized for low-resource systems  
 
 ---
 
-### **Shell**
-A small, terminal‑independent command shell with:
+### Shell
+A small, terminal-independent command shell with:
 - Commands
 - Arguments
 - Simple scripting
 - Easy routing to UART, RTT, TCP, or Zephyr console
 
-Great for bring‑up and debugging.
+Great for bring-up and debugging or configuration management.
 
 ---
 
-### **Watchdog Management**
+### Watchdog management
 Unified interface for hardware watchdogs.
 
-Feed from services or tasks → avoid random device resets.
+Feed from tasks → avoid random device resets.
 
 ---
 
-## Quick Start (POSIX Demo)
+## Quick start (POSIX demo)
 
 1. Open a Codespace or your local environment.
 2. Run:
 
-   **Windows/Linux/macOS/Github Codespace**
-   ```
+   **Windows/Linux/macOS/GitHub Codespace**
+   ```bash
    make all
    ```
 
-3. When the shell appears:
+3. When the Qoraal shell starts:
    ```bash
    . runme.sh
    ```
@@ -106,52 +128,23 @@ You’ll see the demo services start up.
 
 ## Using Qoraal with Zephyr
 
-### 1. Add Qoraal to Your Project
-
+### 1) Add Qoraal to your project
 ```cmake
 add_subdirectory(qoraal)
 target_link_libraries(app PRIVATE qoraal)
 ```
 
-### 2. Enable Zephyr Port
+### 2) Enable Zephyr port
 
-```cmake
-target_compile_definitions(qoraal PRIVATE CFG_OS_ZEPHYR)
-```
-
-### 3. Minimal `prj.conf`
-
-```conf
-CONFIG_MAIN_STACK_SIZE=4096
-CONFIG_THREAD_STACK_INFO=y
-CONFIG_LOG=y
-CONFIG_LOG_DEFAULT_LEVEL=3
-CONFIG_CONSOLE=y
-CONFIG_SHELL=y
-CONFIG_UART_CONSOLE=y
-```
-
-### 4. Initialize Qoraal
-
-```c
-#include "qoraal/qoraal.h"
-#include "qoraal/services.h"
-
-int main(void)
-{
-    qoraal_init();
-    // Register & start your services
-    for (;;) k_sleep(K_MSEC(1000));
-}
-```
+Check the sample test project. Should run on most platforms.
 
 ---
 
 ## Why Qoraal?
 
 - Clean structure without rigidity  
-- Portable across the major RTOS ecosystems  
+- Portable across major RTOS ecosystems  
 - Designed for real products, not toy demos  
 - Small, sharp, predictable  
 
-Qoraal sits quietly in the center of your system and keeps everything running smoothly, without ever getting in your way.
+Qoraal sits quietly in the center of your system and keeps everything coherent, without getting in your way.
