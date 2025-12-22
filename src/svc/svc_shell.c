@@ -57,26 +57,27 @@ static SVC_SHELL_CMD_LIST_T _qshell_static_list = {
         0,
         0
 };
+/* Linker-defined boundaries for the qshell command pointer table */
+extern const SVC_SHELL_CMD_T * __qshell_cmds_base__[];
+extern const SVC_SHELL_CMD_T * __qshell_cmds_end__[];
 
 
-__attribute__((weak, section(".rodata.qshell.cmds."))) char __qshell_cmds_base__;
-__attribute__((weak, section(".rodata.qshell.cmds."))) char __qshell_cmds_end__;
 
 int32_t 
 svc_shell_init(void)
 {
-    uintptr_t base = (uintptr_t)&__qshell_cmds_base__;
-    uintptr_t end = (uintptr_t)&__qshell_cmds_end__;
-    uint32_t cnt = (end - base) / sizeof(SVC_SHELL_CMD_T);
+    const SVC_SHELL_CMD_T * const *base = __qshell_cmds_base__;
+    const SVC_SHELL_CMD_T * const *end  = __qshell_cmds_end__;
+    uint32_t cnt = (uint32_t)(end - base);
+
     if (cnt > 0) {
-        // Cast the base address to the appropriate pointer type
-        _qshell_static_list.cmds = (SVC_SHELL_CMD_T *)base;
+        _qshell_static_list.cmds = base;
         _qshell_static_list.cnt = cnt;
     }
 
-
-    return SVC_SHELL_CMD_E_OK ;
+    return SVC_SHELL_CMD_E_OK;
 }
+
 
 int32_t      
 svc_shell_start (void)
@@ -95,14 +96,14 @@ _cmd_first(SVC_SHELL_CMD_LIST_IT_T * it)
 {
     it->idx = 0 ;
 
-    if (!_qshell_static_list.cmds || !_qshell_static_list.cmds[0].cmd) {
+    if (!_qshell_static_list.cmds || !_qshell_static_list.cmds[0]->cmd) {
         it->lst = _qshell_static_list.next ;
     } else {
         it->lst = &_qshell_static_list ;
     }
 
     if (!it->lst) return 0 ;
-    return &it->lst->cmds[it->idx] ;
+    return it->lst->cmds[it->idx] ;
 }
 
 const SVC_SHELL_CMD_T*
@@ -112,7 +113,7 @@ _cmd_next(SVC_SHELL_CMD_LIST_IT_T * it)
     if (
             !it->lst ||
             (it->lst->cnt && (it->idx >= it->lst->cnt)) ||
-            (it->lst->cmds[it->idx].cmd == 0)
+            (it->lst->cmds[it->idx] == 0)
         ) {
         if (it->lst->next == 0) {
             return 0 ;
@@ -121,20 +122,20 @@ _cmd_next(SVC_SHELL_CMD_LIST_IT_T * it)
         it->idx = 0 ;
     }
 
-    return &it->lst->cmds[it->idx] ;
+    return it->lst->cmds[it->idx] ;
 }
 
 const SVC_SHELL_CMD_T*
 _cmd_get(SVC_SHELL_CMD_LIST_IT_T * it)
 {
-    return &it->lst->cmds[it->idx] ;
+    return it->lst->cmds[it->idx] ;
 }
 
 int
 _cmd_cmp(SVC_SHELL_CMD_LIST_IT_T * it1, SVC_SHELL_CMD_LIST_IT_T * it2)
 {
-    const SVC_SHELL_CMD_T * cmd1 = &it1->lst->cmds[it1->idx] ;
-    const SVC_SHELL_CMD_T * cmd2 = &it2->lst->cmds[it2->idx] ;
+    const SVC_SHELL_CMD_T * cmd1 = it1->lst->cmds[it1->idx] ;
+    const SVC_SHELL_CMD_T * cmd2 = it2->lst->cmds[it2->idx] ;
 
     return strcmp(cmd1->cmd, cmd2->cmd) ;
 }

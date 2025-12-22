@@ -114,7 +114,7 @@ typedef struct  SVC_SHELL_IF_S {
 
 typedef int32_t (*SVC_SHELL_CMD_FP)(SVC_SHELL_IF_T * pif, char** /*argv*/, int /*argc*/);
 
-typedef struct __attribute__((packed)) SVC_SHELL_CMD_S {
+typedef struct SVC_SHELL_CMD_S {
     const char*         cmd ;
     SVC_SHELL_CMD_FP     fp ;
     const char*         usage ;
@@ -124,17 +124,22 @@ typedef struct __attribute__((packed)) SVC_SHELL_CMD_S {
 typedef struct SVC_SHELL_CMD_LIST_S {
     struct SVC_SHELL_CMD_LIST_S*         next ;
     SVC_SERVICES_T         	service ;
-    const SVC_SHELL_CMD_T *  cmds;
+    const SVC_SHELL_CMD_T * const *  cmds;
     uint32_t                cnt;
 } SVC_SHELL_CMD_LIST_T ;
 
 
 #define SVC_SHELL_CMD_LIST_START(name, service) \
-        const SVC_SHELL_CMD_T    _qshell_##name[] ; \
-        SVC_SHELL_CMD_LIST_T     _qshell_##name##_list = { 0, service, _qshell_##name } ; \
-        const SVC_SHELL_CMD_T    _qshell_##name[] = {
-#define SVC_SHELL_CMD_LIST(name, function, usage)    { name, function, usage },
-#define SVC_SHELL_CMD_LIST_END() {0, 0, 0}   } ;
+        static const SVC_SHELL_CMD_T * const _qshell_##name[] ; \
+        SVC_SHELL_CMD_LIST_T     _qshell_##name##_list = { 0, service, _qshell_##name, 0 } ; \
+        static const SVC_SHELL_CMD_T * const _qshell_##name[] = {
+
+#define SVC_SHELL_CMD_LIST(name, function, usage) \
+        &(const SVC_SHELL_CMD_T){ name, function, usage },
+
+#define SVC_SHELL_CMD_LIST_END() \
+        0 \
+        } ;
 
 #define SVC_SHELL_CMD_LIST_INSTALL(name) \
         extern SVC_SHELL_CMD_LIST_T  _qshell_##name##_list ; \
@@ -156,13 +161,15 @@ typedef struct SVC_SHELL_CMD_LIST_S {
 
 #define SVC_SHELL_CMD_DECL(name, function, usage)                            \
     static int32_t function (SVC_SHELL_IF_T * pif, char** argv, int argc) ;        \
-    static const SVC_SHELL_CMD_T CONCAT_LINE(__qoraalcmd_, __LINE__, function) \
-        __attribute__((used, section(".qshell.cmds." #function), aligned(1))) = \
-    {                                                                        \
+    static const SVC_SHELL_CMD_T CONCAT_LINE(__qshell_desc_, __LINE__, function) = {          \
         name,                                                                \
         function,                                                            \
         usage                                                                \
-    }
+    };                                                                                       \
+    static const SVC_SHELL_CMD_T * CONCAT_LINE(__qshell_ptr_, __LINE__, function)            \
+        __attribute__((used, section(".qshell.cmds." #function), aligned(sizeof(void*)))) =  \
+            &CONCAT_LINE(__qshell_desc_, __LINE__, function)
+
 
 
 
