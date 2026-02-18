@@ -98,6 +98,11 @@ int qfs_read_all(const char *path, char **out_buf) {
     return (int)sz;
 }
 
+void qfs_free(void *p) 
+{ 
+    if (p) qoraal_free(QORAAL_HeapAuxiliary, p); 
+}
+
 static char cwd_buf[256];
 
 int qfs_open(qfs_file_t **out, const char *path, int flags)

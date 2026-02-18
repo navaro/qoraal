@@ -150,7 +150,7 @@ qshell_cmd_source (SVC_SHELL_IF_T * pif, char** argv, int argc)
     if (res > 0) {
         /* Run the script read from the file. */
         int32_t run_res = svc_shell_script_run(pif, "", buffer, res);
-        qoraal_free(QORAAL_HeapAuxiliary, buffer);
+        qfs_free(buffer);
         return run_res;
     }
 
@@ -173,7 +173,7 @@ qshell_cmd_cat (SVC_SHELL_IF_T * pif, char** argv, int argc)
     if (res > 0) {
         /* Print file as-is. */
         svc_shell_write(pif, SVC_SHELL_OUT_STD, buffer, res);
-        qoraal_free(QORAAL_HeapAuxiliary, buffer);
+        qfs_free(buffer);
         return SVC_SHELL_CMD_E_OK;
     }
 
