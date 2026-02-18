@@ -172,7 +172,7 @@ qshell_cmd_cat (SVC_SHELL_IF_T * pif, char** argv, int argc)
     int32_t res = read_file_qfs(pif, argv[1], &buffer);
     if (res > 0) {
         /* Print file as-is. */
-        svc_shell_print(pif, SVC_SHELL_OUT_STD, "%s", buffer);
+        svc_shell_write(pif, SVC_SHELL_OUT_STD, buffer, res);
         qoraal_free(QORAAL_HeapAuxiliary, buffer);
         return SVC_SHELL_CMD_E_OK;
     }
