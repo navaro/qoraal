@@ -25,6 +25,7 @@ void qfs_dir_close(qfs_dir_t *d);
 // Files
 // Reads whole file into malloc buffer; returns size or <0 on error.
 int  qfs_read_all(const char *path, char **out_buf);
+void qfs_free(void *p) ;
 
 // Opaque file handle for streaming operations
 typedef struct qfs_file qfs_file_t;
