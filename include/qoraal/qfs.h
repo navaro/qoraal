@@ -30,8 +30,13 @@ void qfs_free(void *p) ;
 // Opaque file handle for streaming operations
 typedef struct qfs_file qfs_file_t;
 
+// File open flags (for qfs_open)
+#define QFS_OPEN_APPEND 0x01   // open for append (create if missing)
+
 /**
- * Open file for writing (create or truncate).
+ * Open file for writing.
+ *
+ * Default behavior is create-or-truncate. Use QFS_OPEN_APPEND to append (create if missing).
  *
  * `flags` is reserved for future extensions (e.g. read/append).
  * It is currently ignored by all backends and should be 0.

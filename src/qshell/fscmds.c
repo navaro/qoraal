@@ -1,4 +1,3 @@
-
 /*
     Copyright (C) 2015-2025, Navaro, All Rights Reserved
     SPDX-License-Identifier: MIT
@@ -274,7 +273,7 @@ qshell_cmd_rm (SVC_SHELL_IF_T * pif, char** argv, int argc)
 
     // Open directory
     qfs_dir_t *dir = NULL;
-    if (qfs_dir_open(&dir, dir_path) <= 0 || !dir) {
+    if (qfs_dir_open(&dir, dir_path) != 0 || !dir) {
         svc_shell_print(pif, SVC_SHELL_OUT_STD, "error opening directory\r\n");
         return SVC_SHELL_CMD_E_FAIL;
     }
@@ -398,6 +397,75 @@ qshell_cmd_mkdir (SVC_SHELL_IF_T * pif, char** argv, int argc)
 }
 
 /* -------------------------------------------------------------------------- */
+/*  fwrite / fwriteln                                                         */
+/* -------------------------------------------------------------------------- */
+
+static int32_t
+qshell_cmd_fwrite (SVC_SHELL_IF_T * pif, char** argv, int argc)
+{
+    if (argc < 3) {
+        return SVC_SHELL_CMD_E_PARMS;
+    }
+
+    char abs[QFS_PATH_MAX];
+    if (qfs_make_abs(abs, sizeof(abs), argv[1]) != 0) {
+        svc_shell_print(pif, SVC_SHELL_OUT_STD, "error: bad path\r\n");
+        return SVC_SHELL_CMD_E_FAIL;
+    }
+
+    qfs_file_t *f = NULL;
+    int rc = qfs_open(&f, abs, QFS_OPEN_APPEND);
+    if (rc < 0 || !f) {
+        svc_shell_print(pif, SVC_SHELL_OUT_STD, "unable to open for append: %s\r\n", abs);
+        return SVC_SHELL_CMD_E_FAIL;
+    }
+
+    /* Append argv[2..] separated by spaces. */
+    for (int i = 2; i < argc; ++i) {
+        if (i > 2) {
+            (void)qfs_write(f, " ", 1);
+        }
+        (void)qfs_write(f, argv[i], strlen(argv[i]));
+    }
+
+    (void)qfs_close(f);
+    return SVC_SHELL_CMD_E_OK;
+}
+
+static int32_t
+qshell_cmd_fwriteln (SVC_SHELL_IF_T * pif, char** argv, int argc)
+{
+    if (argc < 3) {
+        return SVC_SHELL_CMD_E_PARMS;
+    }
+
+    char abs[QFS_PATH_MAX];
+    if (qfs_make_abs(abs, sizeof(abs), argv[1]) != 0) {
+        svc_shell_print(pif, SVC_SHELL_OUT_STD, "error: bad path\r\n");
+        return SVC_SHELL_CMD_E_FAIL;
+    }
+
+    qfs_file_t *f = NULL;
+    int rc = qfs_open(&f, abs, QFS_OPEN_APPEND);
+    if (rc < 0 || !f) {
+        svc_shell_print(pif, SVC_SHELL_OUT_STD, "unable to open for append: %s\r\n", abs);
+        return SVC_SHELL_CMD_E_FAIL;
+    }
+
+    /* Append argv[2..] separated by spaces, then newline. */
+    for (int i = 2; i < argc; ++i) {
+        if (i > 2) {
+            (void)qfs_write(f, " ", 1);
+        }
+        (void)qfs_write(f, argv[i], strlen(argv[i]));
+    }
+    (void)qfs_write(f, "\n", 1);
+
+    (void)qfs_close(f);
+    return SVC_SHELL_CMD_E_OK;
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Command declarations                                                      */
 /* -------------------------------------------------------------------------- */
 
@@ -410,6 +478,8 @@ SVC_SHELL_CMD_DECL("pwd",    qshell_cmd_pwd,    "");
 SVC_SHELL_CMD_DECL("echo",   qshell_cmd_echo,   "[string]");
 SVC_SHELL_CMD_DECL("rm",     qshell_cmd_rm,     "[file]");
 SVC_SHELL_CMD_DECL("mkdir",  qshell_cmd_mkdir,  "[-p] <path> [more_paths...]");
+SVC_SHELL_CMD_DECL("fwrite",  qshell_cmd_fwrite,  "<file> <text...>");
+SVC_SHELL_CMD_DECL("fwriteln",qshell_cmd_fwriteln,"<file> <text...>");
 
 /* This function exists only to force this module into any final binary
  * that wants shell commands. It does nothing at runtime.
@@ -419,6 +489,4 @@ void svc_shell_fscmds_force_link(void)
     /* intentionally empty */
 }
 
-#endif /* CFG_OS_POSIX */
-
-
+#endif /* CFG_QSHELL_FS_ENABLE */

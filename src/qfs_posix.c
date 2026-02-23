@@ -107,11 +107,12 @@ static char cwd_buf[256];
 
 int qfs_open(qfs_file_t **out, const char *path, int flags)
 {
-    (void)flags;
     if (!out || !path) return -EINVAL;
     *out = NULL;
 
-    FILE *fp = fopen(path, "wb");
+    const char *mode = (flags & QFS_OPEN_APPEND) ? "ab" : "wb";
+
+    FILE *fp = fopen(path, mode);
     if (!fp) {
         return -errno;
     }

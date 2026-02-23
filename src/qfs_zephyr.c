@@ -205,7 +205,6 @@ void qfs_free(void *p)
 
 int qfs_open(qfs_file_t **out, const char *path, int flags)
 {
-    (void)flags;
     if (!out || !path) return -EINVAL;
     *out = NULL;
 
@@ -217,7 +216,17 @@ int qfs_open(qfs_file_t **out, const char *path, int flags)
     if (!h) return E_NOMEM;
 
     fs_file_t_init(&h->file);
-    rc = fs_open(&h->file, p, FS_O_CREATE | FS_O_TRUNC | FS_O_WRITE);
+
+    /* Default: create-or-truncate for write. If append flag is set,
+     * create if missing and append to end. */
+    fs_mode_t mode = FS_O_CREATE | FS_O_WRITE;
+    if (flags & QFS_OPEN_APPEND) {
+        mode |= FS_O_APPEND;
+    } else {
+        mode |= FS_O_TRUNC;
+    }
+
+    rc = fs_open(&h->file, p, mode);
     if (rc) {
         free(h);
         return rc;
@@ -282,16 +291,14 @@ int qfs_unlink(const char *path) {
     char p[QFS_PATH_MAX];
     int rc = make_path(p, sizeof(p), path);
     if (rc) return rc;
-    rc = fs_unlink(p);              // files only
-    return rc ? -rc : 0;
+    return fs_unlink(p);   // returns 0 or negative errno
 }
 
 int qfs_rmdir(const char *path) {
     char p[QFS_PATH_MAX];
     int rc = make_path(p, sizeof(p), path);
     if (rc) return rc;
-    rc = fs_unlink(p);              // we treat rmdir as unlink for now
-    return rc ? -rc : 0;
+    return fs_unlink(p);   // or fs_rmdir if your FS supports it
 }
 
 // Minimal '*' and '?' wildcard matcher (no char classes, ranges, etc.)
