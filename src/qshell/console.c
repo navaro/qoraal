@@ -190,7 +190,8 @@ int32_t
 console_out (void* ctx, uint32_t out, const char* str)
 {
     if (str && (out && out < SVC_SHELL_IN_STD)) {
-        qoraal_debug_print (str) ;
+        if (out == SVC_SHELL_OUT_SYS) qoraal_debug_print (str) ;
+        else qoraal_print (str) ;
 
     }
 
