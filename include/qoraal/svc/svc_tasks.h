@@ -59,7 +59,11 @@ typedef enum  {
     SERVICE_PRIO_QUEUE_MAX
 } SVC_TASK_PRIO_T ;
 
-#define SVC_TASK_CFG_MAX            3
+#if defined CFG_SVC_TASK_CFG_MAX
+#define SVC_TASK_CFG_MAX            CFG_SVC_TASK_CFG_MAX
+#else
+#define SVC_TASK_CFG_MAX            5
+#endif
 #if defined CFG_SVC_TASK_CFG_DEFAULT
 #define SVC_TASK_CFG_DEFAULT  CFG_SVC_TASK_CFG_DEFAULT
 #else

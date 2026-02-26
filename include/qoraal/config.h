@@ -79,6 +79,9 @@
 */
 #define CFG_QSHELL_SERVICES_ENABLE       1
 
+#if !(defined CFG_SVC_TASK_CFG_MAX)
+#define CFG_SVC_TASK_CFG_MAX             3
+#endif
 #if !(defined CFG_SVC_TASK_CFG_DEFAULT)
 #define CFG_SVC_TASK_CFG_DEFAULT    {OS_THREAD_PRIO_11, 1024*1, "svc-task0", TIMEOUT_10_SEC}    \
                                     ,{OS_THREAD_PRIO_10, 1024*2, "svc-task1", TIMEOUT_10_SEC}    \
