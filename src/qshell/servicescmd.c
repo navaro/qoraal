@@ -143,9 +143,10 @@ qshell_cmd_ctrl (SVC_SHELL_IF_T * pif, char** argv, int argc)
         uint32_t arg = 0 ;
         if (argc > 3) {
             svc_shell_scan_int(argv[3], &arg) ;
+            svc_service_set_arg(h, arg) ;
 
         }
-        int32_t res = svc_service_start_timeout (h, arg, 5000) ;
+        int32_t res = svc_service_start_timeout (h, 5000) ;
         if (res != EOK) {
             svc_shell_print (pif, SVC_SHELL_OUT_STD,
                 "ERROR: Starting '%s' service failed with %d\r\n", argv[1], res) ;
