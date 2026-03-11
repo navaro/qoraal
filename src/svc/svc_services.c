@@ -515,7 +515,7 @@ _service_start (SVC_SERVICE_T* pservice, SVC_SERVICE_COMPLETE_CB cb, uintptr_t c
  * @svc
  */
 int32_t
-svc_service_start (SCV_SERVICE_HANDLE handle, uintptr_t arg, SVC_SERVICE_COMPLETE_CB cb, uintptr_t cb_parm)
+svc_service_start (SCV_SERVICE_HANDLE handle, SVC_SERVICE_COMPLETE_CB cb, uintptr_t cb_parm)
 {
     int res = E_UNEXP ;
     int32_t status ;
@@ -536,7 +536,6 @@ svc_service_start (SCV_SERVICE_HANDLE handle, uintptr_t arg, SVC_SERVICE_COMPLET
             (status != SVC_SERVICE_STATUS_DISABLED)
         ) {
 
-        pservice->parm = arg ;
         res = _service_start (pservice, cb, cb_parm) ;
 
     }
@@ -663,7 +662,7 @@ restart_cb(SVC_SERVICES_T id, uintptr_t cb_parm)
  * @svc
  */
 int32_t
-svc_service_start_timeout (SCV_SERVICE_HANDLE handle, uintptr_t arg, uint32_t timeout)
+svc_service_start_timeout (SCV_SERVICE_HANDLE handle, uint32_t timeout)
 {
     int32_t res =  E_UNEXP;
     OS_SEMAPHORE_DECL (sem) ;
@@ -677,7 +676,7 @@ svc_service_start_timeout (SCV_SERVICE_HANDLE handle, uintptr_t arg, uint32_t ti
     os_sem_init (&sem, 0) ;
 
     if (_service_status (pservice) == SVC_SERVICE_STATUS_STOPPED) {
-        if ((res = svc_service_start (handle, arg, restart_cb,  (uintptr_t)&sem)) == EOK) {
+        if ((res = svc_service_start (handle, restart_cb,  (uintptr_t)&sem)) == EOK) {
             res = os_sem_wait_timeout (&sem, OS_MS2TICKS(timeout)) ;
             os_mutex_lock (&_svc_service_mutex) ;
             pservice->cb = 0 ;
@@ -862,7 +861,7 @@ svc_service_status (SCV_SERVICE_HANDLE handle)
     return _service_status (pservice) ;
 }
 
-uint32_t
+uintptr_t
 svc_service_get_arg (SCV_SERVICE_HANDLE handle)
 {
     SVC_SERVICE_T* pservice ;
@@ -874,6 +873,21 @@ svc_service_get_arg (SCV_SERVICE_HANDLE handle)
 
     return pservice->parm ;
 }
+
+uintptr_t
+svc_service_set_arg (SCV_SERVICE_HANDLE handle, uintptr_t arg)
+{
+    SVC_SERVICE_T* pservice ;
+
+    if (!_svc_service_list)  return 0 ;
+    if (handle >= _cfg_service_cnt) return 0 ;
+
+    pservice = &_svc_service_list[handle] ;
+
+    pservice->parm = arg ;
+    return arg ;
+}
+
 
 uint32_t
 svc_service_get_flags (SCV_SERVICE_HANDLE handle)

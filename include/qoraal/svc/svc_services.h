@@ -141,15 +141,16 @@ extern "C" {
     extern SCV_SERVICE_HANDLE       svc_service_next (SCV_SERVICE_HANDLE handle) ;
     extern SVC_SERVICES_T           svc_service_service (SCV_SERVICE_HANDLE handle) ;
 
-    extern int32_t                  svc_service_start (SCV_SERVICE_HANDLE handle, uintptr_t arg, SVC_SERVICE_COMPLETE_CB cb, uintptr_t cb_parm) ;
-    extern int32_t                  svc_service_start_timeout (SCV_SERVICE_HANDLE handle, uintptr_t arg, uint32_t timeout) ;
+    extern int32_t                  svc_service_start (SCV_SERVICE_HANDLE handle, SVC_SERVICE_COMPLETE_CB cb, uintptr_t cb_parm) ;
+    extern int32_t                  svc_service_start_timeout (SCV_SERVICE_HANDLE handle, uint32_t timeout) ;
     extern int32_t                  svc_service_stop (SCV_SERVICE_HANDLE handle, SVC_SERVICE_COMPLETE_CB cb, uintptr_t cb_parm) ;
     extern int32_t                  svc_service_stop_timeout (SCV_SERVICE_HANDLE handle, uint32_t timeout) ;
     extern int32_t                  svc_service_ctrl (SCV_SERVICE_HANDLE handle, uint32_t cmd, uintptr_t parm) ;
     extern void                     svc_service_ctrl_broadcast (uint32_t cmd, uintptr_t parm) ;
 
     extern int32_t                  svc_service_status (SCV_SERVICE_HANDLE handle) ;
-    extern uint32_t                 svc_service_get_arg (SCV_SERVICE_HANDLE handle) ;
+    extern uintptr_t                svc_service_get_arg (SCV_SERVICE_HANDLE handle) ;
+    extern uintptr_t                svc_service_set_arg (SCV_SERVICE_HANDLE handle, uintptr_t arg) ;
     extern uint32_t                 svc_service_get_flags (SCV_SERVICE_HANDLE handle) ;
     extern int32_t                  svc_service_exit_status (SCV_SERVICE_HANDLE handle) ;
     extern const char*              svc_service_name (SCV_SERVICE_HANDLE handle) ;
