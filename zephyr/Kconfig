@@ -1,0 +1,11 @@
+menu "Qoraal"
+
+config QORAAL
+    bool "Enable Qoraal framework"
+    default y
+
+config QORAAL_QFS
+    bool "Enable Qoraal file system"
+    default y
+
+endmenu

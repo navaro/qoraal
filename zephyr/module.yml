@@ -1,0 +1,6 @@
+name: qoraal
+
+build:
+  cmake: zephyr
+  kconfig: zephyr/Kconfig
+
