@@ -9,7 +9,7 @@ zephyr_include_directories(
 )
 
 # Core sources (adjust if needed)
-zephyr_library_sources(
+zephyr_library_sources_ifdef(CONFIG_QORAAL
     ${CMAKE_CURRENT_LIST_DIR}/../src/qoraal.c
     ${CMAKE_CURRENT_LIST_DIR}/../src/debug.c
     ${CMAKE_CURRENT_LIST_DIR}/../src/os_mlock.c
