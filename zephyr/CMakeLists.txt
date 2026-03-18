@@ -43,7 +43,6 @@ zephyr_compile_definitions(
 )
 
 # Translate Zephyr config → Qoraal config
-zephyr_compile_definitions_ifdef(CONFIG_QORAAL_QFS CFG_QFS_DISABLE=0)
 zephyr_compile_definitions_ifndef(CONFIG_QORAAL_QFS CFG_QFS_DISABLE=1)
 
 zephyr_linker_sources(SECTIONS ${CMAKE_CURRENT_LIST_DIR}/rom.ld)
