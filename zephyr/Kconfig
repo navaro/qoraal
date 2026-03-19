@@ -8,4 +8,8 @@ config QORAAL_QFS
     bool "Enable Qoraal file system"
     default y
 
+config QORAAL_QSHELL_PROMPT
+    string "Qoraal shell prompt"
+    default "[Qoraal] #> "
+
 endmenu

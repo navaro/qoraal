@@ -51,7 +51,7 @@ bool                _console_echo_on =
 
 #define SHELL_VERSION_STR   "Navaro Qoraal Demo v '" __DATE__ "'"
 #define SHELL_HELLO         "Enter 'help' or '?' to view available commands. "
-#define SHELL_PROMPT        "[Qoraal] #> "
+#define SHELL_PROMPT        CFG_CONSOLE_PROMPT
 
 /*===========================================================================*/
 /* Service Local Functions                                                   */

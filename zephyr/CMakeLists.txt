@@ -44,6 +44,8 @@ zephyr_compile_definitions(
 
 # Translate Zephyr config → Qoraal config
 zephyr_compile_definitions_ifndef(CONFIG_QORAAL_QFS CFG_QFS_DISABLE=1)
+zephyr_compile_definitions(CFG_CONSOLE_PROMPT=CONFIG_QORAAL_QSHELL_PROMPT)
+
 
 zephyr_linker_sources(SECTIONS ${CMAKE_CURRENT_LIST_DIR}/rom.ld)
 zephyr_linker_sources(DATA_SECTIONS ${CMAKE_CURRENT_LIST_DIR}/ram.ld)

@@ -87,3 +87,7 @@
                                     ,{OS_THREAD_PRIO_8, 1024*2, "svc-task1", TIMEOUT_10_SEC}    \
                                     ,{OS_THREAD_PRIO_5, 1024*2, "svc-task2", TIMEOUT_10_SEC}    
 #endif
+
+#if !(defined CFG_CONSOLE_PROMPT)
+#define CFG_CONSOLE_PROMPT              "[Qoraal] #> "
+#endif
