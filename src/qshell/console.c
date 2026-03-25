@@ -276,8 +276,12 @@ int32_t console_get_line(char *buffer, uint32_t len)
 void
 console_logger_cb (void* channel, LOGGER_TYPE_T type, uint8_t facility, const char* msg)
 {
-    qoraal_debug_print(msg) ;
-    qoraal_debug_print ("\r\n") ;
+    if ((SVC_LOGGER_GET_FLAGS(type) & SVC_LOGGER_FLAGS_NO_FORMATTING)) {
+        qoraal_print(msg) ;
+    }  else {
+        qoraal_debug_print(msg) ;
+        qoraal_debug_print ("\r\n") ;
+    }
 }
 
 typedef struct {
