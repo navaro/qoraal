@@ -65,6 +65,7 @@ static int32_t  console_get_line (char * buffer, uint32_t len) ;
 SVC_SHELL_CMD_DECL("exit", qshell_cmd_exit, "");
 SVC_SHELL_CMD_DECL("version", qshell_cmd_version, "");
 SVC_SHELL_CMD_DECL("hello", qshell_cmd_hello, "");
+SVC_SHELL_CMD_DECL("loglevel", qshell_loglevel, "[level]");
 
 
 
@@ -367,6 +368,35 @@ int32_t
 qshell_cmd_exit (SVC_SHELL_IF_T * pif, char** argv, int argc)
 {
     _shell_exit = true ;
+    return SVC_SHELL_CMD_E_OK ;
+}
+
+
+/**
+ * @brief       qshell_cmd_exit
+ * @details     Exits the shell service.
+ *
+ * @param[in]   pif     Shell interface pointer.
+ * @param[in]   argv    Command-line arguments.
+ * @param[in]   argc    Number of command-line arguments.
+ *
+ * @return      status  The result of the command execution.
+ */
+int32_t
+qshell_loglevel (SVC_SHELL_IF_T * pif, char** argv, int argc)
+{
+    uint32_t val = SVC_LOGGER_GET_SEVERITY(_shell_log_channel.filter[0].type) ;
+    if (argc > 1) {
+
+        if (svc_shell_scan_int (argv[1], (uint32_t*)&val) == EOK) {
+            SVC_LOGGER_SET_SEVERITY(_shell_log_channel.filter[0].type, val) ;
+
+            svc_logger_channel_remove (&_shell_log_channel) ;
+            svc_logger_channel_add (&_shell_log_channel) ;
+        }
+    }
+
+    svc_shell_print (pif, SVC_SHELL_OUT_STD, "Filter level %d\r\n", val) ;
     return SVC_SHELL_CMD_E_OK ;
 }
 
