@@ -31,19 +31,24 @@ void qfs_free(void *p) ;
 typedef struct qfs_file qfs_file_t;
 
 // File open flags (for qfs_open)
-#define QFS_OPEN_APPEND 0x01   // open for append (create if missing)
+#define QFS_OPEN_READ   0x01   // open existing file for reading
+#define QFS_OPEN_APPEND 0x02   // open for append (create if missing)
 
 /**
- * Open file for writing.
+ * Open file for reading or writing.
  *
- * Default behavior is create-or-truncate. Use QFS_OPEN_APPEND to append (create if missing).
- *
- * `flags` is reserved for future extensions (e.g. read/append).
- * It is currently ignored by all backends and should be 0.
+ * Use QFS_OPEN_READ to open an existing file for reading.
+ * Default write behavior is create-or-truncate. Use QFS_OPEN_APPEND to append (create if missing).
  *
  * Returns 0 on success, <0 on error.
  */
 int qfs_open(qfs_file_t **out, const char *path, int flags);
+
+/**
+ * Read up to `len` bytes from an open file handle.
+ * Returns bytes read, 0 on EOF, or <0 on error.
+ */
+int qfs_read(qfs_file_t *f, void *buf, size_t len);
 
 /**
  * Write data to an open file handle.

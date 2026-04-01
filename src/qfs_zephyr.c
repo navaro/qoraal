@@ -16,6 +16,26 @@ struct qfs_file { struct fs_file_t file; int opened; };
 
 static char s_cwd[256] = QFS_ROOT; // emulate a cwd rooted at /lfs
 
+static int qfs_read_file_all(struct fs_file_t *f, char *buf, size_t file_sz)
+{
+    size_t total = 0;
+
+    while (total < file_sz) {
+        ssize_t n = fs_read(f, buf + total, file_sz - total);
+        if (n < 0) {
+            return (int)n;
+        }
+        if (n == 0) {
+            return -EIO;
+        }
+
+        total += (size_t)n;
+    }
+
+    buf[file_sz] = '\0';
+    return (int)file_sz;
+}
+
 /* Put near the top, after includes and QFS_ROOT. */
 static int normalize_path(char *path, size_t path_sz)
 {
@@ -174,9 +194,13 @@ int qfs_read_all(const char *path, char **out_buf) {
 
     struct fs_dirent st;
     rc = fs_stat(p, &st);
-    if (rc || st.size <= 0) {
+    if (rc) {
         fs_close(&f);
-        return rc ? rc : -EIO;
+        return rc;
+    }
+    if (st.type != FS_DIR_ENTRY_FILE) {
+        fs_close(&f);
+        return -EIO;
     }
 
     char *buf = qoraal_malloc(QORAAL_HeapAuxiliary, st.size + 1);
@@ -185,17 +209,16 @@ int qfs_read_all(const char *path, char **out_buf) {
         return -ENOMEM;
     }
 
-    ssize_t n = fs_read(&f, buf, st.size);
+    int n = qfs_read_file_all(&f, buf, (size_t)st.size);
     fs_close(&f);
 
-    if (n != (ssize_t)st.size) {
+    if (n < 0) {
         qoraal_free(QORAAL_HeapAuxiliary, buf);
-        return -EIO;
+        return n;
     }
 
-    buf[st.size] = '\0';
     *out_buf = buf;
-    return (int)st.size;
+    return n;
 }
 
 void qfs_free(void *p) 
@@ -217,13 +240,23 @@ int qfs_open(qfs_file_t **out, const char *path, int flags)
 
     fs_file_t_init(&h->file);
 
-    /* Default: create-or-truncate for write. If append flag is set,
-     * create if missing and append to end. */
-    fs_mode_t mode = FS_O_CREATE | FS_O_WRITE;
-    if (flags & QFS_OPEN_APPEND) {
-        mode |= FS_O_APPEND;
-    } else {
-        mode |= FS_O_TRUNC;
+    if(!flags) flags = QFS_OPEN_READ; // default to read if no flags
+
+    if ((flags & QFS_OPEN_READ) && (flags & QFS_OPEN_APPEND)) {
+        free(h);
+        return -EINVAL;
+    }
+
+    fs_mode_t mode = FS_O_READ;
+    if (!(flags & QFS_OPEN_READ)) {
+        /* Default: create-or-truncate for write. If append flag is set,
+         * create if missing and append to end. */
+        mode = FS_O_CREATE | FS_O_WRITE;
+        if (flags & QFS_OPEN_APPEND) {
+            mode |= FS_O_APPEND;
+        } else {
+            mode |= FS_O_TRUNC;
+        }
     }
 
     rc = fs_open(&h->file, p, mode);
@@ -235,6 +268,18 @@ int qfs_open(qfs_file_t **out, const char *path, int flags)
     h->opened = 1;
     *out = h;
     return 0;
+}
+
+int qfs_read(qfs_file_t *f, void *buf, size_t len)
+{
+    if (!f || !f->opened || !buf) return -EINVAL;
+    if (len == 0) return 0;
+
+    ssize_t n = fs_read(&f->file, buf, len);
+    if (n < 0) {
+        return (int)n;
+    }
+    return (int)n;
 }
 
 int qfs_write(qfs_file_t *f, const void *buf, size_t len)

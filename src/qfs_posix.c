@@ -18,6 +18,28 @@ struct qfs_dir { DIR *dp; };
 
 struct qfs_file { FILE *fp; };
 
+static int qfs_read_fp_all(FILE *fp, char *buf, size_t file_sz)
+{
+    size_t total = 0;
+
+    while (total < file_sz) {
+        size_t n = fread(buf + total, 1, file_sz - total, fp);
+        if (n > 0) {
+            total += n;
+            continue;
+        }
+
+        if (ferror(fp)) {
+            return -EIO;
+        }
+
+        return -EIO;
+    }
+
+    buf[file_sz] = 0;
+    return (int)file_sz;
+}
+
 int qfs_dir_open(qfs_dir_t **out, const char *path) {
     DIR *dp = opendir(path ? path : ".");
     if (!dp) return -1;
@@ -85,17 +107,16 @@ int qfs_read_all(const char *path, char **out_buf) {
         return -5;
     }
 
-    size_t n = fread(buf, 1, (size_t)sz, fp);
+    int rc = qfs_read_fp_all(fp, buf, (size_t)sz);
     fclose(fp);
 
-    if (n != (size_t)sz) {
+    if (rc < 0) {
         qoraal_free(QORAAL_HeapAuxiliary, buf);
-        return -6;
+        return rc;
     }
 
-    buf[sz] = 0;
     *out_buf = buf;
-    return (int)sz;
+    return rc;
 }
 
 void qfs_free(void *p) 
@@ -110,7 +131,14 @@ int qfs_open(qfs_file_t **out, const char *path, int flags)
     if (!out || !path) return -EINVAL;
     *out = NULL;
 
-    const char *mode = (flags & QFS_OPEN_APPEND) ? "ab" : "wb";
+    if(!flags) flags = QFS_OPEN_READ; // default to read if no flags
+
+    if ((flags & QFS_OPEN_READ) && (flags & QFS_OPEN_APPEND)) {
+        return -EINVAL;
+    }
+
+    const char *mode = (flags & QFS_OPEN_READ) ? "rb" :
+                       (flags & QFS_OPEN_APPEND) ? "ab" : "wb";
 
     FILE *fp = fopen(path, mode);
     if (!fp) {
@@ -126,6 +154,25 @@ int qfs_open(qfs_file_t **out, const char *path, int flags)
     h->fp = fp;
     *out  = h;
     return 0;
+}
+
+int qfs_read(qfs_file_t *f, void *buf, size_t len)
+{
+    if (!f || !f->fp || !buf) return -EINVAL;
+    if (len == 0) return 0;
+
+    size_t n = fread(buf, 1, len, f->fp);
+    if (n > 0) {
+        return (int)n;
+    }
+    if (feof(f->fp)) {
+        return 0;
+    }
+    if (ferror(f->fp)) {
+        return -EIO;
+    }
+
+    return -EIO;
 }
 
 int qfs_write(qfs_file_t *f, const void *buf, size_t len)
