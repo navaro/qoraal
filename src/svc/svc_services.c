@@ -232,7 +232,7 @@ _service_thread (void * arg)
 
     int32_t status  = pservice->run (pservice->parm) ;
 
-    DBG_MESSAGE_SVC_SERVICES ((status < 0 ? DBG_MESSAGE_SEVERITY_WARNING : DBG_MESSAGE_SEVERITY_LOG), 
+    DBG_MESSAGE_SVC_SERVICES ((status < 0 ? DBG_MESSAGE_SEVERITY_WARNING : DBG_MESSAGE_SEVERITY_REPORT), 
                 "SVC   :%s: stopped '%s' with %d in %dms.",
                 status < 0 ? "W" : " ", 
                 pservice->name,
