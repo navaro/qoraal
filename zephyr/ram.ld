@@ -1,10 +1,9 @@
 
-/* --- Uninitialized RAM for memlogger (~10 KiB) --- */
-SECTION_DATA_PROLOGUE(.memlog, (NOLOAD),)
+/* --- Uninitialized RAM for memlogger (~4 KiB here) --- */
+SECTION_PROLOGUE(.memlog, (NOLOAD),)
 {
     . = ALIGN(4);
     __memlog_base__ = .;
-    . += 4K;                 /* change to 5K for ~5 KiB */
+    . += 4K;
     __memlog_end__ = .;
-
-} GROUP_LINK_IN(RAMABLE_REGION)
+} GROUP_NOLOAD_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)

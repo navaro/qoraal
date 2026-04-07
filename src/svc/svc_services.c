@@ -232,8 +232,12 @@ _service_thread (void * arg)
 
     int32_t status  = pservice->run (pservice->parm) ;
 
-    DBG_MESSAGE_SVC_SERVICES (DBG_MESSAGE_SEVERITY_LOG, "SVC   : : stopped '%s' in %dms.",
-                pservice->name, OS_TICKS2MS(os_sys_ticks() - pservice->exit_status));
+    DBG_MESSAGE_SVC_SERVICES ((status < 0 ? DBG_MESSAGE_SEVERITY_WARNING : DBG_MESSAGE_SEVERITY_LOG), 
+                "SVC   :%s: stopped '%s' with %d in %dms.",
+                status < 0 ? "W" : " ", 
+                pservice->name,
+                status,
+                OS_TICKS2MS(os_sys_ticks() - pservice->exit_status));
 
     pservice->exit_status = status ;
 
@@ -494,7 +498,7 @@ _service_start (SVC_SERVICE_T* pservice, SVC_SERVICE_COMPLETE_CB cb, uintptr_t c
 
     if (res != EOK) {
         DBG_MESSAGE_SVC_SERVICES (DBG_MESSAGE_SEVERITY_WARNING,
-            "SVC   : : failed with %d starting '%s'",
+            "SVC   :W: failed with %d starting '%s'",
             res, pservice->name);
     }
 
