@@ -319,7 +319,7 @@ os_sys_tick_freq(void)
 uint32_t
 os_sys_timestamp(void)
 {
-    return k_cycle_get_32();
+    return k_uptime_get_32();
 }
 
 uint32_t
@@ -1163,3 +1163,4 @@ os_timer_reset(p_timer_t *timer)
 /* -------------------------------------------------------------------------- */
 
 #endif /* CFG_OS_ZEPHYR */
+
