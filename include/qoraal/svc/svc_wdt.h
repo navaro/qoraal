@@ -63,6 +63,7 @@ typedef struct SVC_WDT_HANDLE_S {
     p_thread_t      thread ;
     uintptr_t       id ;
     uint32_t        flags ;
+    SVC_WDT_TIMEOUTS_T timeout ;
 } SVC_WDT_HANDLE_T ;
 
 
@@ -80,6 +81,7 @@ extern "C" {
 
     void                    svc_wdt_register (SVC_WDT_HANDLE_T * handler, SVC_WDT_TIMEOUTS_T id) ;
     void                    svc_wdt_unregister (SVC_WDT_HANDLE_T * handler, SVC_WDT_TIMEOUTS_T id) ;
+    uint32_t                svc_wdt_timeout (SVC_WDT_HANDLE_T * handler) ;
 
     void                    svc_wdt_activate (SVC_WDT_HANDLE_T * handler) ;
     void                    svc_wdt_set_id (SVC_WDT_HANDLE_T * handler, uintptr_t id) ;
@@ -93,5 +95,5 @@ extern "C" {
 #endif
 
 
-#endif /* __SVC_EVENTS_H__ */
+#endif /* __SVC_WDT_H__ */
 /** @} */

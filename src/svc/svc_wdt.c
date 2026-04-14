@@ -125,7 +125,8 @@ void
 svc_wdt_register (SVC_WDT_HANDLE_T * handler, SVC_WDT_TIMEOUTS_T id)
 {
     memset (handler, 0, sizeof(SVC_WDT_HANDLE_T)) ;
-    handler->thread = os_thread_current () ; ;
+    handler->thread = os_thread_current () ;
+    handler->timeout = id ;
 #ifndef CFG_SVC_WDT_DISABLE_PLATFORM
     if (id < TIMEOUT_LAST) {
         os_mutex_lock (&_svc_wdt_mutex) ;
@@ -159,6 +160,23 @@ svc_wdt_unregister (SVC_WDT_HANDLE_T * handler, SVC_WDT_TIMEOUTS_T id)
 #endif
 }
 
+/**
+ * @brief   Get the timeout value for a watchdog handler.
+ *
+ * @param[in] handler       Caller allocated handle structure
+ *
+ * @return              Timeout value in seconds, or -1 if invalid.
+ *
+ * @svc
+ */
+uint32_t
+svc_wdt_timeout (SVC_WDT_HANDLE_T * handler)
+{
+    if (handler->timeout == TIMEOUT_10_SEC) return 10 ;
+    else if (handler->timeout == TIMEOUT_30_SEC) return 30 ;
+    else if (handler->timeout == TIMEOUT_60_SEC) return 60 ;
+    return 10 ;
+}
 
 void
 svc_wdt_activate (SVC_WDT_HANDLE_T * handler)
@@ -208,8 +226,8 @@ svc_wdt_handler_kick (SVC_WDT_HANDLE_T * handler)
     }
 
     os_mutex_lock (&_svc_wdt_mutex) ;
-    handler->flags |= (SVC_WDT_FLAGS_KICKED) ;
-    handler->flags &= (SVC_WDT_FLAGS_REPORTED|SVC_WDT_FLAGS_FLAGGED) ;
+    handler->flags |= SVC_WDT_FLAGS_KICKED ;
+    handler->flags &= ~(SVC_WDT_FLAGS_REPORTED|SVC_WDT_FLAGS_FLAGGED) ;
     os_mutex_unlock (&_svc_wdt_mutex) ;
 #endif
 }
@@ -285,6 +303,7 @@ svc_wdt_task_cb (SVC_TASKS_T *task, uintptr_t parm, uint32_t reason)
         os_mutex_lock (&_svc_wdt_mutex) ;
         _svc_wdt_counter++ ;
         kick10 = svc_wdt_process (TIMEOUT_10_SEC) ;
+        /* Timeout values describe the full reset window, so we check twice per window. */
         if (!kick30 || !(_svc_wdt_counter%(30/_svc_wdt_interval))) {
             kick30 = svc_wdt_process (TIMEOUT_30_SEC) ;
         }
@@ -315,5 +334,3 @@ svc_wdt_task_cb (SVC_TASKS_T *task, uintptr_t parm, uint32_t reason)
 
 }
 #endif
-
-

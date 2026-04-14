@@ -375,7 +375,7 @@ svc_tasks_service_task ( linked_t* task_list, int thd_count, SVC_WDT_HANDLE_T * 
 
 #ifndef NDEBUG
         timer = os_sys_ticks() - timer;
-        if (timer > OS_MS2TICKS(2500)) {
+        if (timer > OS_MS2TICKS(svc_wdt_timeout(hwdt)*250)) {
             DBG_MESSAGE_SVC_TASKS (DBG_MESSAGE_SEVERITY_REPORT,
                 "SVC   : : svc_tasks_service_task %d elapsed for 0x%x queue %d",
                 OS_TICKS2MS(timer), callback, thd_count);
