@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <errno.h>
 #include <stdarg.h>
 #include "qoraal/config.h"
 #include "qoraal/qoraal.h"
@@ -245,59 +246,48 @@ int32_t svc_shell_write(SVC_SHELL_IF_T * pif, uint32_t out,
 
 int32_t svc_shell_scan_int (const char * str, uint32_t * val)
 {
-    uint32_t i = 0 ;
-    int32_t type = 0;
+    const char * digits = str ;
+    char * end_ptr ;
+    unsigned long long parsed ;
+    int base = 0 ;
+    int negative = 0 ;
 
-    if ((str[0] == '+') || (str[0] == '-')) {
-        i = 1 ;
-
-    }
-    if ((str[0] == '0') && ((str[1] == 'x') || (str[1] == 'b'))
-    ) {
-        type = 1 ;
-        i = 2 ;
-
-    }
-
-    while (str[i]) {
-        if ((type == 0) && !isdigit((int)str[i])) {
-            type = 1 ;
-
-        }
-        if ((type == 1) && !isxdigit((int)str[i])) {
-            type = 2 ;
-            break ;
-
-        }
-        i++ ;
-
-    }
-
-    if (type == 0) {
-        sscanf(str, "%i", (int*)val) ;
-
-    }
-    else if (type == 1) {
-        if ((str[0] == '0') && (str[1] == 'x')) {
-            sscanf(str, "0x%x", (unsigned int*)val) ;
-
-        } 
-#if 0
-        else if ((str[0] == '0') && (str[1] == 'b')) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic warning "-Wformat"
-            sscanf(str, "0b%b", (unsigned int*)val) ;
-#pragma GCC diagnostic pop
-        } 
-#endif        
-        else {
-            sscanf(str, "%x", (unsigned int*)val) ;
-
-        }
-
-    } else {
+    if (!str || !val || !str[0]) {
         return SVC_SHELL_CMD_E_FAIL ;
+    }
 
+    if ((*digits == '+') || (*digits == '-')) {
+        negative = (*digits == '-') ;
+        digits++ ;
+        if (!digits[0]) {
+            return SVC_SHELL_CMD_E_FAIL ;
+        }
+    }
+
+    if ((digits[0] == '0') && ((digits[1] == 'b') || (digits[1] == 'B'))) {
+        base = 2 ;
+        digits += 2 ;
+        if (!digits[0]) {
+            return SVC_SHELL_CMD_E_FAIL ;
+        }
+    }
+
+    errno = 0 ;
+    parsed = strtoull(digits, &end_ptr, base) ;
+    if ((errno != 0) || !end_ptr || (*end_ptr != '\0')) {
+        return SVC_SHELL_CMD_E_FAIL ;
+    }
+
+    if (negative) {
+        if (parsed > ((unsigned long long)INT32_MAX + 1ULL)) {
+            return SVC_SHELL_CMD_E_FAIL ;
+        }
+        *val = (uint32_t)(-(int64_t)parsed) ;
+    } else {
+        if (parsed > UINT32_MAX) {
+            return SVC_SHELL_CMD_E_FAIL ;
+        }
+        *val = (uint32_t)parsed ;
     }
 
     return SVC_SHELL_CMD_E_OK ;
