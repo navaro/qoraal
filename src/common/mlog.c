@@ -41,7 +41,7 @@ typedef struct _MEMLOG_IT_S {
     uint16_t            log ;
 } _MEMLOG_IT_T ;
 
-static char*            _mlog_print_buffer[MLOG_LOGS_MSG_SIZE_MAX]  ;
+static char             _mlog_print_buffer[MLOG_LOGS_MSG_SIZE_MAX] ;
 static MLOG_INST_T  *   _mlog_inst[2] = {0} ;
 static uint16_t         _memlog_started = 0 ;
 static uint16_t         _memlog_cnt = 0 ;
@@ -119,13 +119,21 @@ static int32_t
 _append (uint16_t type, uint16_t id, MLOG_TYPE_T log, const char* fmtstr, va_list  args)
 {
     int cnt = 10 ;
+    int msglen ;
     CBUFFER_QUEUE_T* logqueue = get_cqueue (log) ;
     if (!logqueue) {
         return E_UNEXP ;
     }
 
-    int msglen = vsnprintf ((char*)_mlog_print_buffer, MLOG_LOGS_MSG_SIZE_MAX-2, fmtstr, args) ;
-    _mlog_print_buffer[MLOG_LOGS_MSG_SIZE_MAX-1] = '\0' ;
+    msglen = vsnprintf (_mlog_print_buffer, sizeof(_mlog_print_buffer), fmtstr, args) ;
+    if (msglen < 0) {
+        _mlog_print_buffer[0] = '\0' ;
+        msglen = 0 ;
+    } else if (msglen >= (int)sizeof(_mlog_print_buffer)) {
+        _mlog_print_buffer[sizeof(_mlog_print_buffer) - 1] = '\0' ;
+        msglen = sizeof(_mlog_print_buffer) - 1 ;
+    }
+
     int len = (sizeof(QORAAL_LOG_MSG_T) + msglen + 1 + sizeof(uint32_t)  ) / sizeof(uint32_t) ;
     CBUFFER_ITEM_T* buffer = cqueue_enqueue (logqueue, len) ;
     while (!buffer && cqueue_dequeue (logqueue) && cnt--) {
@@ -143,13 +151,13 @@ _append (uint16_t type, uint16_t id, MLOG_TYPE_T log, const char* fmtstr, va_lis
         msg->date = rtc_get_date () ;
         msg->time = rtc_get_time () ;
         msg->len = msglen + 1;
-        memcpy(msg->msg, (char*)_mlog_print_buffer, msg->len);
+        memcpy(msg->msg, _mlog_print_buffer, msg->len);
 
-        for (cnt = 1; cnt < 3; cnt++) {
-            if ((msg->msg[msglen-cnt] == '\r') || (msg->msg[msglen-cnt] == '\n')) {
-                msg->msg[msglen-cnt] = '\0' ;
+        while (msglen &&
+            ((msg->msg[msglen-1] == '\r') || (msg->msg[msglen-1] == '\n'))) {
+                msg->msg[msglen-1] = '\0' ;
                 msg->len-- ;
-            }
+                msglen-- ;
         }
 
         cqueue_flush_item (logqueue, buffer) ;

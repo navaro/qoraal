@@ -32,6 +32,8 @@
 #include <string.h>
 #include "qoraal/common/cbuffer.h"
 
+#define CBUFFER_ITEM_HDR_DWSIZE     (sizeof(CBUFFER_ITEM_T) / sizeof(uint32_t))
+
 static  void
 flush_bufer(void* buffer, uint32_t size)
 {
@@ -356,44 +358,54 @@ cqueue_backwards(CBUFFER_QUEUE_T* cq, CBUFFER_ITEM_T* item)
 int32_t
 cqueue_validate_item(CBUFFER_QUEUE_T* cq, CBUFFER_ITEM_T* item)
 {
-    if (((uint32_t*)item >= cq->cb.end) ||
-        ((uint32_t*)item < cq->cb.start)) {
+    if (!cq || !item) {
         return 0;
     }
 
+    if (((uint32_t*)item < cq->cb.start) ||
+        (((uint32_t*)item + CBUFFER_ITEM_HDR_DWSIZE) > cq->cb.end)) {
+        return 0;
+    }
 
     if (item->magic != CBUFFER_MAGIC) {
         return 0;
     }
-    if (item->dwsize > cq->cb.end - cq->cb.start) {
+    if ((item->dwsize < CBUFFER_ITEM_HDR_DWSIZE) ||
+        (item->dwsize > (uint32_t)(cq->cb.end - cq->cb.start))) {
         return 0;
     }
 
-    if (
-        ((uint32_t*)item >= cq->cb.end) ||
-        ((uint32_t*)item < cq->cb.start)
-        ) {
+    if (((uint32_t*)item + item->dwsize) > cq->cb.end) {
+        return 0;
+    }
+
+    if ((item->next == item) || (item->prev == item)) {
         return 0;
     }
 
     if (item->next != (struct CBUFFER_ITEM_S *)cq) {
-
-        if (((uint32_t*)item->next >= cq->cb.end) ||
-            ((uint32_t*)item->next < cq->cb.start)) {
-
+        if (((uint32_t*)item->next < cq->cb.start) ||
+            (((uint32_t*)item->next + CBUFFER_ITEM_HDR_DWSIZE) > cq->cb.end)) {
             return 0;
         }
+        if (item->next->prev != item) {
+            return 0;
+        }
+    } else if (cq->prev != item) {
+        return 0;
     }
 
     if (item->prev != (struct CBUFFER_ITEM_S *)cq) {
-
-        if (((uint32_t*)item->prev >= cq->cb.end) ||
-            ((uint32_t*)item->prev < cq->cb.start)) {
+        if (((uint32_t*)item->prev < cq->cb.start) ||
+            (((uint32_t*)item->prev + CBUFFER_ITEM_HDR_DWSIZE) > cq->cb.end)) {
             return 0;
         }
+        if (item->prev->next != item) {
+            return 0;
+        }
+    } else if (cq->next != item) {
+        return 0;
     }
-
-
 
     return 1;
 }
@@ -433,13 +445,13 @@ cqueue_validate(CBUFFER_QUEUE_T* cq, uint32_t* cbuffer, uint32_t dwsize)
             break ;
         }
 
-        if ( ((uint32_t*)cq->cb.read >= cq->cb.end) ||
+        if ( ((uint32_t*)cq->cb.read > cq->cb.end) ||
             ((uint32_t*)cq->cb.read < cq->cb.start) ) {
             res = 0;
             break ;
         }
 
-        if ( ((uint32_t*)cq->cb.write >= cq->cb.end) ||
+        if ( ((uint32_t*)cq->cb.write > cq->cb.end) ||
             ((uint32_t*)cq->cb.write < cq->cb.start) ) {
             res = 0;
             break ;
@@ -466,7 +478,10 @@ cqueue_validate(CBUFFER_QUEUE_T* cq, uint32_t* cbuffer, uint32_t dwsize)
         }
 
         for (i = cqueue_front(cq); i; ) {
-
+            if (count >= (int32_t)dwsize) {
+                res = 0;
+                break ;
+            }
 
             if (!cqueue_validate_item(cq, i)) {
                 res = 0;
@@ -481,7 +496,10 @@ cqueue_validate(CBUFFER_QUEUE_T* cq, uint32_t* cbuffer, uint32_t dwsize)
         cq->count = 0 ;
 
         for (i = cqueue_back(cq); i; ) {
-
+            if (cq->count >= dwsize) {
+                res = 0;
+                break ;
+            }
 
             if (!cqueue_validate_item(cq, i)) {
                 res = 0;
@@ -524,4 +542,3 @@ cqueue_flush_item(CBUFFER_QUEUE_T* cq, CBUFFER_ITEM_T* item)
 {
     flush_bufer (item->data, item->dwsize*sizeof(uint32_t)) ;
 }
-
