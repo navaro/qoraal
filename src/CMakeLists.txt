@@ -9,6 +9,7 @@ set(QORAAL_SRCS
     qfs_posix.c
     qfs_zephyr.c
     svc/svc_events.c
+    svc/svc_message.c
     svc/svc_logger.c
     svc/svc_services.c
     svc/svc_shell.c

@@ -198,24 +198,27 @@ int32_t
 svc_tasks_start (void)
 {
     uintptr_t i ;
+    int32_t status = EOK ;
 
     _svc_tasks_run = 1 ;
 
     svc_events_register (SVC_EVENTS_TASK, &_svc_tasks_event_handler, svc_tasks_task_event, 0) ;
 
-    for (i=0; i<_svc_tasks_pool_count; i++) {
+    for (i=0; (i<_svc_tasks_pool_count) && (status == EOK); i++) {
         os_event_clear (&_svc_tasks_complete_event, 1<<i) ;
         int32_t res = os_thread_create (_svc_tasks_pool.pool[i].stack, _svc_tasks_pool.pool[i].prio,
         		svc_tasks_thread, (void*)i, &_svc_task_threads[i], _svc_tasks_pool.pool[i].name) ;
         if (res != EOK) {
             DBG_MESSAGE_SVC_TASKS (DBG_MESSAGE_SEVERITY_ASSERT,
                 "SVC   :A: svc_tasks_start fail %d for task %d", res , i) ;
+            status = res ;
 
         } else {
-            uint32_t started = os_event_wait_timeout (&_svc_tasks_complete_event, 1, 1<<i, 0, OS_MS2TICKS(1000)) ;
+            uint32_t started = os_event_wait_timeout (&_svc_tasks_complete_event, 1<<i, 1<<i, 0, OS_MS2TICKS(1000)) ;
             if (!started) {
                 DBG_MESSAGE_SVC_TASKS (DBG_MESSAGE_SEVERITY_ASSERT,
                                 "SVC   :A: svc_tasks_start timeout for task %d", i) ;
+                status = E_TIMEOUT ;
 
             }
 
@@ -223,18 +226,39 @@ svc_tasks_start (void)
 
     }
 
-    return EOK ;
+    if (status != EOK) {
+        svc_tasks_stop (1000) ;
+    }
+
+    return status ;
 }
 
 int32_t
 svc_tasks_stop (uint32_t timeout)
 {
-    /* ToDo: fixme  */
+    uintptr_t i ;
+    int32_t status = timeout ? EOK : E_TIMEOUT ;
+    uint32_t ticks = OS_MS2TICKS(timeout) ;
+
     svc_events_unregister (SVC_EVENTS_TASK, &_svc_tasks_event_handler) ;
     os_timer_reset (&_svc_tasks_virtual_timer) ;
     _svc_tasks_run = 0 ;
 
-    return timeout ?  EOK : E_TIMEOUT ;
+    for (i=0; i<_svc_tasks_pool_count; i++) {
+        if (_svc_task_threads[i]) {
+            os_thread_notify (&_svc_task_threads[i], EOK) ;
+        }
+    }
+
+    if (timeout) {
+        for (i=0; i<_svc_tasks_pool_count; i++) {
+            if (_svc_task_threads[i] && (os_thread_join_timeout (&_svc_task_threads[i], ticks) != EOK)) {
+                status = E_TIMEOUT ;
+            }
+        }
+    }
+
+    return status ;
 }
 
 void
@@ -372,6 +396,8 @@ svc_tasks_service_task ( linked_t* task_list, int thd_count, SVC_WDT_HANDLE_T * 
         _svc_task_active_timer[thd_count] = 0 ;
         svc_wdt_set_id (hwdt, 0) ;
         os_sys_unlock();
+
+        os_event_signal (&_svc_tasks_complete_event, 1 << thd_count) ;
 
 #ifndef NDEBUG
         timer = os_sys_ticks() - timer;
@@ -600,8 +626,8 @@ svc_tasks_cancel (SVC_TASKS_T* task)
         os_mutex_unlock (&_svc_task_mutex) ;
         task->callback (task, parm, SERVICE_CALLBACK_REASON_CANCELED) ;
 
-        if (start->flags & SVC_TASKS_FLAGS_WAITABLE) {
-            p_event_t event = ((SVC_WAITABLE_TASKS_T*)start)->event ;
+        if (task->flags & SVC_TASKS_FLAGS_WAITABLE) {
+            p_event_t event = ((SVC_WAITABLE_TASKS_T*)task)->event ;
             os_event_signal (&event, 1) ;
         }
 
@@ -691,7 +717,7 @@ int32_t
 svc_tasks_wait_queue (uint32_t queue, uint32_t timeout)
 {
     if (queue < _svc_tasks_pool_count) {
-        return  os_event_wait_timeout (&_svc_tasks_complete_event, 0, 1<<queue, 0, OS_MS2TICKS(timeout)) ;
+        return  os_event_wait_timeout (&_svc_tasks_complete_event, 1<<queue, 1<<queue, 0, timeout) ;
 
     }
 
@@ -703,7 +729,7 @@ svc_tasks_wait (SVC_TASKS_T* task, uint32_t timeout)
 {
     if (task->flags & SVC_TASKS_FLAGS_WAITABLE) {
         p_event_t event = ((SVC_WAITABLE_TASKS_T*)task)->event ;
-        return os_event_wait_timeout (&event, 0, 1, 0, SVC_TASK_MS2TICKS(timeout)) ?
+        return os_event_wait_timeout (&event, 0, 1, 0, timeout) ?
                 EOK : E_TIMEOUT ;
 
     }
@@ -711,14 +737,12 @@ svc_tasks_wait (SVC_TASKS_T* task, uint32_t timeout)
     while (
             ((svc_tasks_status(task) != SERVICE_STATUS_COMPLETE) ||  svc_tasks_is_active(task))
                     && timeout) {
-        os_thread_sleep (10) ;
-        if (timeout >= 10) timeout -= 10;
-        else timeout = 0 ;
+        uint32_t wait = timeout > SVC_TASK_MS2TICKS(10) ? SVC_TASK_MS2TICKS(10) : timeout ;
+        os_thread_sleep (SVC_TASK_TICKS2MS(wait)) ;
+        timeout -= wait ;
     }
 
 
     return ((svc_tasks_status(task) != SERVICE_STATUS_COMPLETE) || svc_tasks_is_active(task)) ? E_TIMEOUT : EOK  ;
 
 }
-
-

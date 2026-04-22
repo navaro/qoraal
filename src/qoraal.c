@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "qoraal/qoraal.h"
+#include "qoraal/svc/svc_message.h"
 #include "qoraal/svc/svc_events.h"
 #include "qoraal/svc/svc_tasks.h"
 #include "qoraal/svc/svc_logger.h"
@@ -67,6 +68,7 @@ qoraal_init_default (const QORAAL_CFG_T * instance, SVC_SERVICE_T * list)
     }
     
     svc_events_init () ;
+    svc_message_init (SERVICE_PRIO_QUEUE3) ;
     svc_tasks_init (0) ;
     svc_wdt_init () ;
     svc_logger_init (SERVICE_PRIO_QUEUE3) ;
@@ -94,6 +96,7 @@ qoraal_start_default (void)
 
     svc_wdt_start () ;
     svc_events_start () ;
+    svc_message_start () ;
     svc_tasks_start () ;
     svc_logger_start () ;
     svc_threads_start () ;

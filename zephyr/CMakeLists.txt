@@ -19,6 +19,7 @@ zephyr_library_sources_ifdef(CONFIG_QORAAL
     ${CMAKE_CURRENT_LIST_DIR}/../src/qfs_posix.c
     ${CMAKE_CURRENT_LIST_DIR}/../src/qfs_zephyr.c
     ${CMAKE_CURRENT_LIST_DIR}/../src/svc/svc_events.c
+    ${CMAKE_CURRENT_LIST_DIR}/../src/svc/svc_message.c
     ${CMAKE_CURRENT_LIST_DIR}/../src/svc/svc_logger.c
     ${CMAKE_CURRENT_LIST_DIR}/../src/svc/svc_services.c
     ${CMAKE_CURRENT_LIST_DIR}/../src/svc/svc_shell.c
