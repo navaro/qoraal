@@ -84,7 +84,7 @@ extern "C" {
     extern int32_t          svc_message_start (void) ;
 
     extern uint32_t         svc_message_would_post (int32_t module) ;
-    extern SVC_MESSAGE_T *  svc_message_create (uint32_t size) ;
+    extern SVC_MESSAGE_T *  svc_message_create (uint32_t size, uint32_t type, int32_t module) ;
     extern int32_t          svc_message_post (SVC_MESSAGE_T * message) ;
 
     extern void             svc_message_channel_add (SVC_MESSAGE_CHANNEL_T * channel) ;

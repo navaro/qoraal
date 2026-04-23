@@ -132,7 +132,7 @@ svc_message_would_post (int32_t module)
 }
 
 SVC_MESSAGE_T *
-svc_message_create (uint32_t size)
+svc_message_create (uint32_t size, uint32_t type, int32_t module)
 {
     SVC_MESSAGE_T * message ;
     uint32_t now = qoraal_current_time() ;
@@ -146,7 +146,8 @@ svc_message_create (uint32_t size)
     svc_tasks_init_task (&message->task) ;
 
     message->id = _message_id++ ;
-    message->module = SVC_SERVICES_INVALID ;
+    message->module = module ;
+    message->type = type ;
     message->size = size ;
     message->timestamp_ms = os_sys_timestamp() ;
     rtc_localtime (now, &message->date, &message->time) ;
