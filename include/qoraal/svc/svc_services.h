@@ -56,6 +56,7 @@ typedef enum  {
 /*===========================================================================*/
 
 typedef uint32_t                        SCV_SERVICE_HANDLE ;
+typedef uint32_t                        SVC_SERVICE_HANDLE ;
 
 #define SVC_SERVICE_INVALID_HANDLE      0xFFFFFFFF
 
@@ -135,27 +136,27 @@ extern "C" {
     extern void                     svc_service_register_handler (SVC_SERVICE_HANDLER_T * handler, SVC_SERVICE_CALLBACK_T fp, uintptr_t parm) ;
     extern void                     svc_service_unregister_handler (SVC_SERVICE_HANDLER_T * handler) ;
 
-    extern SCV_SERVICE_HANDLE       svc_service_get (SVC_SERVICES_T id) ;
-    extern SCV_SERVICE_HANDLE       svc_service_get_by_name (const char * name) ;
-    extern SCV_SERVICE_HANDLE       svc_service_first (void) ;
-    extern SCV_SERVICE_HANDLE       svc_service_next (SCV_SERVICE_HANDLE handle) ;
-    extern SVC_SERVICES_T           svc_service_service (SCV_SERVICE_HANDLE handle) ;
+    extern SVC_SERVICE_HANDLE       svc_service_get (SVC_SERVICES_T id) ;
+    extern SVC_SERVICE_HANDLE       svc_service_get_by_name (const char * name) ;
+    extern SVC_SERVICE_HANDLE       svc_service_first (void) ;
+    extern SVC_SERVICE_HANDLE       svc_service_next (SVC_SERVICE_HANDLE handle) ;
+    extern SVC_SERVICES_T           svc_service_service (SVC_SERVICE_HANDLE handle) ;
 
-    extern int32_t                  svc_service_start (SCV_SERVICE_HANDLE handle, SVC_SERVICE_COMPLETE_CB cb, uintptr_t cb_parm) ;
-    extern int32_t                  svc_service_start_timeout (SCV_SERVICE_HANDLE handle, uint32_t timeout) ;
-    extern int32_t                  svc_service_stop (SCV_SERVICE_HANDLE handle, SVC_SERVICE_COMPLETE_CB cb, uintptr_t cb_parm) ;
-    extern int32_t                  svc_service_stop_timeout (SCV_SERVICE_HANDLE handle, uint32_t timeout) ;
-    extern int32_t                  svc_service_ctrl (SCV_SERVICE_HANDLE handle, uint32_t cmd, uintptr_t parm) ;
+    extern int32_t                  svc_service_start (SVC_SERVICE_HANDLE handle, SVC_SERVICE_COMPLETE_CB cb, uintptr_t cb_parm) ;
+    extern int32_t                  svc_service_start_timeout (SVC_SERVICE_HANDLE handle, uint32_t timeout) ;
+    extern int32_t                  svc_service_stop (SVC_SERVICE_HANDLE handle, SVC_SERVICE_COMPLETE_CB cb, uintptr_t cb_parm) ;
+    extern int32_t                  svc_service_stop_timeout (SVC_SERVICE_HANDLE handle, uint32_t timeout) ;
+    extern int32_t                  svc_service_ctrl (SVC_SERVICE_HANDLE handle, uint32_t cmd, uintptr_t parm) ;
     extern void                     svc_service_ctrl_broadcast (uint32_t cmd, uintptr_t parm) ;
 
-    extern int32_t                  svc_service_status (SCV_SERVICE_HANDLE handle) ;
-    extern uintptr_t                svc_service_get_arg (SCV_SERVICE_HANDLE handle) ;
-    extern uintptr_t                svc_service_set_arg (SCV_SERVICE_HANDLE handle, uintptr_t arg) ;
-    extern uint32_t                 svc_service_get_flags (SCV_SERVICE_HANDLE handle) ;
-    extern int32_t                  svc_service_exit_status (SCV_SERVICE_HANDLE handle) ;
-    extern const char*              svc_service_name (SCV_SERVICE_HANDLE handle) ;
-    extern const char*              svc_service_status_name (SCV_SERVICE_HANDLE handle) ;
-    extern const char*              svc_service_status_description (SCV_SERVICE_HANDLE handle) ;
+    extern int32_t                  svc_service_status (SVC_SERVICE_HANDLE handle) ;
+    extern uintptr_t                svc_service_get_arg (SVC_SERVICE_HANDLE handle) ;
+    extern uintptr_t                svc_service_set_arg (SVC_SERVICE_HANDLE handle, uintptr_t arg) ;
+    extern uint32_t                 svc_service_get_flags (SVC_SERVICE_HANDLE handle) ;
+    extern int32_t                  svc_service_exit_status (SVC_SERVICE_HANDLE handle) ;
+    extern const char*              svc_service_name (SVC_SERVICE_HANDLE handle) ;
+    extern const char*              svc_service_status_name (SVC_SERVICE_HANDLE handle) ;
+    extern const char*              svc_service_status_description (SVC_SERVICE_HANDLE handle) ;
 
     void                            svc_service_system_halt (void) ;
 
