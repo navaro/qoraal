@@ -37,6 +37,46 @@ static OS_MUTEX_DECL       (_svc_threads_mutex) ;
 
 static void		svc_threads_terminate (void) ;
 
+static bool
+svc_threads_thread_can_run (void)
+{
+#if (defined CFG_OS_POSIX && CFG_OS_POSIX) || (defined CFG_OS_CHIBIOS && CFG_OS_CHIBIOS)
+    return true ;
+#else
+    return os_sys_started () != 0 ;
+#endif
+}
+
+static bool
+svc_threads_is_registered (SVC_THREADS_T* thread)
+{
+    SVC_THREADS_T* start ;
+
+    for ( start = (SVC_THREADS_T*)linked_head (&_svc_threads_list) ;
+        (start!=NULL_LLO)
+            ; ) {
+
+        if (start == thread) {
+            return true ;
+        }
+
+        start = (SVC_THREADS_T*)linked_next (start, OFFSETOF(SVC_THREADS_T, next));
+    }
+
+    for ( start = (SVC_THREADS_T*)linked_head (&_svc_threads_complete) ;
+        (start!=NULL_LLO)
+            ; ) {
+
+        if (start == thread) {
+            return true ;
+        }
+
+        start = (SVC_THREADS_T*)linked_next (start, OFFSETOF(SVC_THREADS_T, next));
+    }
+
+    return false ;
+}
+
 #if !defined CFG_SVC_THREADS_DISABLE_IDLE
 static OS_SEMAPHORE_DECL (_svc_threads_sem) ;
 static p_thread_t   _svc_threads_idle = 0 ;
@@ -118,12 +158,19 @@ svc_threads_create (SVC_THREADS_T* thread, SVC_THREADS_COMPLETE_CALLBACK_T compl
                             void *arg, const char* name)
 {
     int32_t res = EFAIL ;
+    bool lock = svc_threads_thread_can_run () ;
+
+    if (lock) os_mutex_lock(&_svc_threads_mutex) ;
+
+    if (svc_threads_is_registered (thread)) {
+        res = E_BUSY ;
+        goto unlock ;
+    }
 
     thread->arg = arg ;
     thread->complete = complete ;
     thread->pf = pf ;
 
-    if (os_sys_started()) os_mutex_lock(&_svc_threads_mutex) ;
     res = os_thread_create (stack_size, prio, svc_thread_start,
                             thread, &thread->thread, name) ;
 
@@ -136,10 +183,13 @@ svc_threads_create (SVC_THREADS_T* thread, SVC_THREADS_COMPLETE_CALLBACK_T compl
                 name, thread, thread->thread, _svc_threads_list_count+1) ;
 
     } else {
+        thread->thread = 0 ;
         thread->pf = 0 ;
 
     }
-    if (os_sys_started()) os_mutex_unlock(&_svc_threads_mutex) ;
+
+unlock:
+    if (lock) os_mutex_unlock(&_svc_threads_mutex) ;
 
     return res ;
 }
@@ -193,7 +243,7 @@ svc_threads_terminate (void)
 }
 
 static inline int32_t
-svc_threads_complete_check (void)
+svc_threads_complete_check (bool block)
 {
     SVC_THREADS_T* start  ;
 
@@ -203,7 +253,11 @@ svc_threads_complete_check (void)
 
     }
 
-    os_mutex_lock(&_svc_threads_mutex) ;
+    if (block) {
+        os_mutex_lock(&_svc_threads_mutex) ;
+    } else if (os_mutex_trylock(&_svc_threads_mutex) != EOK) {
+        return E_BUSY ;
+    }
     start = (SVC_THREADS_T*)linked_head (&_svc_threads_complete) ;
     if (start!=NULL_LLO) {
         p_thread_t thread = start->thread ;
@@ -245,7 +299,7 @@ svc_threads_complete_check (void)
 uint32_t
 svc_threads_count (void)
 {
-    while (svc_threads_complete_check () == EOK) ;
+    while (svc_threads_complete_check (true) == EOK) ;
 
     return _svc_threads_list_count ;
 }
@@ -275,6 +329,6 @@ svc_threads_is_active (SVC_THREADS_T* svc_thread)
 #if defined CFG_SVC_THREADS_DISABLE_IDLE && defined CFG_OS_FREERTOS
 void vApplicationIdleHook(void)
 {
-    svc_threads_complete_check () ;
+    while (svc_threads_complete_check (false) == EOK) ;
 }
 #endif
