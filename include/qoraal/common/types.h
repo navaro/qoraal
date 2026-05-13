@@ -17,7 +17,9 @@ typedef struct QORAAL_ENUM_VALUE_S {
 typedef struct QORAAL_ENUM_TYPE_S {
     const char *type_name;
     const QORAAL_ENUM_VALUE_T *values;
-    size_t count;
+    uint16_t count;
+    uint16_t id;
+    struct QORAAL_ENUM_TYPE_S * next ;
 } QORAAL_ENUM_TYPE_T;
 
 #endif /* __QORAAL_TYPES_H__ */
