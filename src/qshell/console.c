@@ -107,10 +107,15 @@ console_service_ctrl (uint32_t code, uintptr_t arg)
         svc_shell_fscmds_force_link () ;
 #endif
         _console_service_id = svc_service_service ((SCV_SERVICE_HANDLE) arg ) ;
+
+        // the implementation on the platform should check if the 
+        // uart is ready before writing to it, so we can safely 
+        // add the log channel here.
+        svc_logger_channel_add (&_shell_log_channel) ;
+
         break ;
 
     case SVC_SERVICE_CTRL_START:
-        svc_logger_channel_add (&_shell_log_channel) ;
         break ;
 
     case SVC_SERVICE_CTRL_STOP: 
