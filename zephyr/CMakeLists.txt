@@ -1,5 +1,9 @@
 # Zephyr module integration for Qoraal
 
+if(NOT CONFIG_QORAAL)
+    return()
+endif()
+
 zephyr_library()
 
 # Includes
