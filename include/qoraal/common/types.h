@@ -57,6 +57,9 @@ struct QORAAL_PROP_S {
     uintptr_t arg;
 };
 
+/* Resource capability flags for QORAAL_PROP_RESOURCE_T.flags */
+#define QORAAL_PROP_RESOURCE_FLAG_EVENTS    (1U << 0)  /* resource publishes streaming events */
+
 typedef struct QORAAL_PROP_RESOURCE_S {
     struct QORAAL_PROP_RESOURCE_S *next; /* Intrusive registration list. */
 
@@ -71,6 +74,9 @@ typedef struct QORAAL_PROP_RESOURCE_S {
 
     QORAAL_PROP_T *props;
     size_t props_count;
+
+    uint32_t flags;  /* QORAAL_PROP_RESOURCE_FLAG_* capability bits */
+    int32_t  module; /* Module ID for event routing; -1 = none */
 } QORAAL_PROP_RESOURCE_T;
 
 
@@ -117,8 +123,33 @@ typedef struct QORAAL_PROP_RESOURCE_S {
         get_sum_,                                                      \
         set_sum_,                                                      \
         props_,                                                        \
-        QORAAL_ARRAY_SIZE(props_)                                      \
+        QORAAL_ARRAY_SIZE(props_),                                     \
+        0,                                                             \
+        -1                                                             \
     }
+
+#define QORAAL_PROP_RESOURCE_INIT_EX(title_, version_, ep_, tag_, desc_, get_sum_, set_sum_, props_, flags_, module_) \
+    {                                                                  \
+        0,                                                             \
+        title_,                                                        \
+        version_,                                                      \
+        ep_,                                                           \
+        tag_,                                                          \
+        desc_,                                                         \
+        get_sum_,                                                      \
+        set_sum_,                                                      \
+        props_,                                                        \
+        QORAAL_ARRAY_SIZE(props_),                                     \
+        flags_,                                                        \
+        module_                                                        \
+    }
+
+/* Convenience macro for resources that publish streaming events.
+ * The module ID is always -1 at compile time; the owning service must assign
+ * inst->module = service_id at runtime before registering with CMM. */
+#define QORAAL_PROP_RESOURCE_INIT_EVENTS(title_, version_, ep_, tag_, desc_, get_sum_, set_sum_, props_) \
+    QORAAL_PROP_RESOURCE_INIT_EX(title_, version_, ep_, tag_, desc_, get_sum_, set_sum_, props_, \
+                                 QORAAL_PROP_RESOURCE_FLAG_EVENTS, -1)
 
 #define QORAAL_PROP_RESOURCE_DECL_EX(name, title_, version_, ep_, tag_, desc_, get_sum_, set_sum_, props_) \
     QORAAL_PROP_RESOURCE_T name = QORAAL_PROP_RESOURCE_INIT(title_, version_, ep_, tag_, desc_, get_sum_, set_sum_, props_)
