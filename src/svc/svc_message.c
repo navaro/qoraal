@@ -116,7 +116,7 @@ svc_message_would_post(int16_t module)
 }
 
 SVC_MESSAGE_T *
-svc_message_create(uint16_t size, int16_t module, uint16_t flags)
+svc_message_create(uint16_t size, int16_t module, uint32_t flags)
 {
     SVC_MESSAGE_T *message;
 
@@ -133,7 +133,9 @@ svc_message_create(uint16_t size, int16_t module, uint16_t flags)
     svc_tasks_init_task(&message->task);
 
     message->timestamp_ms = os_sys_timestamp();
+    os_mutex_lock(&_message_mutex);
     message->id = _message_id++;
+    os_mutex_unlock(&_message_mutex);
     message->module = module;
     message->flags = flags ? flags : SVC_MESSAGE_DEFAULT_FLAGS;
     message->size = size;
