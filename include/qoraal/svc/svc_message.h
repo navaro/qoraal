@@ -157,9 +157,6 @@ typedef struct SVC_MESSAGE_CHANNEL_S {
 struct SVC_MESSAGE_S {
     SVC_TASKS_T task;
 
-    uint32_t    timestamp_ms;
-
-    uint32_t    id;
     uint32_t    flags;
     int16_t     module;
 
