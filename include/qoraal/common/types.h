@@ -76,7 +76,7 @@ typedef struct QORAAL_PROP_RESOURCE_S {
     size_t props_count;
 
     uint32_t flags;  /* QORAAL_PROP_RESOURCE_FLAG_* capability bits */
-    int32_t  module; /* Module ID for event routing; -1 = none */
+    int32_t  module; /* Owning service/module id; -1 = unassigned */
 } QORAAL_PROP_RESOURCE_T;
 
 
@@ -145,8 +145,7 @@ typedef struct QORAAL_PROP_RESOURCE_S {
     }
 
 /* Convenience macro for resources that publish streaming events.
- * The module ID is always -1 at compile time; the owning service must assign
- * inst->module = service_id at runtime before registering with CMM. */
+ * CMM assigns the owning service/module id during resource registration. */
 #define QORAAL_PROP_RESOURCE_INIT_EVENTS(title_, version_, ep_, tag_, desc_, get_sum_, set_sum_, props_) \
     QORAAL_PROP_RESOURCE_INIT_EX(title_, version_, ep_, tag_, desc_, get_sum_, set_sum_, props_, \
                                  QORAAL_PROP_RESOURCE_FLAG_EVENTS, -1)
