@@ -8,7 +8,6 @@
 
 static SVC_MESSAGE_FILTER_T _message_filter = {0};
 static SVC_TASK_PRIO_T      _message_task_prio;
-static uint32_t             _message_id = 0;
 static int32_t              _message_sending = 0;
 
 static LISTS_LINKED_DECL    (_message_channels);
@@ -85,7 +84,6 @@ svc_message_init(SVC_TASK_PRIO_T prio)
     memset(&_message_filter, 0, sizeof(_message_filter));
 
     _message_task_prio = prio;
-    _message_id = 0;
     _message_sending = 0;
 
     return EOK;
@@ -132,10 +130,6 @@ svc_message_create(uint16_t size, int16_t module, uint32_t flags)
     memset(message, 0, sizeof(SVC_MESSAGE_T) + size);
     svc_tasks_init_task(&message->task);
 
-    message->timestamp_ms = os_sys_timestamp();
-    os_mutex_lock(&_message_mutex);
-    message->id = _message_id++;
-    os_mutex_unlock(&_message_mutex);
     message->module = module;
     message->flags = flags ? flags : SVC_MESSAGE_DEFAULT_FLAGS;
     message->size = size;

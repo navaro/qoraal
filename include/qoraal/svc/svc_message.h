@@ -22,9 +22,8 @@ typedef uint64_t SVC_MESSAGE_MASK_T;
 /*
  * Route layout (SVC_MESSAGE_MASK_T, 64 bits):
  *
- * bits  0..15   message flags/class/severity/qos
- * bits 16..47   module/source bits
- * bits 48..63   reserved for future routing
+ * bits  0..31   message flags/class/severity/qos
+ * bits 32..63   module/source bitmask (up to 32 modules, each bit corresponds to a module ID)
  *
  * Message flags layout (SVC_MESSAGE_T::flags, 32 bits):
  *
@@ -157,9 +156,6 @@ typedef struct SVC_MESSAGE_CHANNEL_S {
 struct SVC_MESSAGE_S {
     SVC_TASKS_T task;
 
-    uint32_t    timestamp_ms;
-
-    uint32_t    id;
     uint32_t    flags;
     int16_t     module;
 
