@@ -204,7 +204,6 @@ extern "C" {
 extern int32_t svc_message_init(SVC_TASK_PRIO_T prio);
 extern int32_t svc_message_start(void);
 
-extern uint32_t svc_message_would_post(int16_t module);
 extern uint32_t svc_message_would_post_route(SVC_MESSAGE_MASK_T route);
 
 extern SVC_MESSAGE_T *svc_message_create(
@@ -220,8 +219,6 @@ extern void svc_message_channel_remove(SVC_MESSAGE_CHANNEL_T *channel);
 
 extern int32_t svc_message_wait(uint32_t timeout);
 extern int32_t svc_message_wait_all(uint32_t timeout);
-
-extern SVC_MESSAGE_FILTER_T svc_message_get_filter(void);
 
 #ifdef __cplusplus
 }

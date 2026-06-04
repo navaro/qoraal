@@ -6,29 +6,11 @@
 #include "qoraal/os.h"
 #include "qoraal/svc/svc_message.h"
 
-static SVC_MESSAGE_FILTER_T _message_filter = {0};
 static SVC_TASK_PRIO_T      _message_task_prio;
 static int32_t              _message_sending = 0;
 
 static LISTS_LINKED_DECL    (_message_channels);
 static OS_MUTEX_DECL        (_message_mutex);
-
-static void
-message_channel_available(void)
-{
-    SVC_MESSAGE_CHANNEL_T *start;
-
-    memset(&_message_filter, 0, sizeof(_message_filter));
-
-    for (start = (SVC_MESSAGE_CHANNEL_T *)linked_head(&_message_channels);
-         start != NULL_LLO;
-         start = (SVC_MESSAGE_CHANNEL_T *)linked_next((plists_t)start, OFFSETOF(SVC_MESSAGE_CHANNEL_T, next))) {
-
-        _message_filter.require |= start->filter.require;
-        _message_filter.accept  |= start->filter.accept;
-        _message_filter.reject  |= start->filter.reject;
-    }
-}
 
 static uint32_t
 message_channel_matches(const SVC_MESSAGE_CHANNEL_T *channel, SVC_MESSAGE_MASK_T route)
@@ -81,8 +63,6 @@ svc_message_init(SVC_TASK_PRIO_T prio)
     os_mutex_init(&_message_mutex);
     linked_init(&_message_channels);
 
-    memset(&_message_filter, 0, sizeof(_message_filter));
-
     _message_task_prio = prio;
     _message_sending = 0;
 
@@ -98,19 +78,26 @@ svc_message_start(void)
 uint32_t
 svc_message_would_post_route(SVC_MESSAGE_MASK_T route)
 {
+    SVC_MESSAGE_CHANNEL_T *start;
+    uint32_t would_post = 0;
+
     if (!route) {
         return 0;
     }
 
-    return svc_message_filter_match(&_message_filter, route);
-}
+    os_mutex_lock(&_message_mutex);
+    for (start = (SVC_MESSAGE_CHANNEL_T *)linked_head(&_message_channels);
+         start != NULL_LLO;
+         start = (SVC_MESSAGE_CHANNEL_T *)linked_next((plists_t)start, OFFSETOF(SVC_MESSAGE_CHANNEL_T, next))) {
 
-uint32_t
-svc_message_would_post(int16_t module)
-{
-    return svc_message_would_post_route(
-        SVC_MESSAGE_ROUTE(module, SVC_MESSAGE_DEFAULT_FLAGS)
-    );
+        if (message_channel_matches(start, route)) {
+            would_post = 1;
+            break;
+        }
+    }
+    os_mutex_unlock(&_message_mutex);
+
+    return would_post;
 }
 
 SVC_MESSAGE_T *
@@ -184,7 +171,6 @@ svc_message_channel_add(SVC_MESSAGE_CHANNEL_T *channel)
 {
     os_mutex_lock(&_message_mutex);
     linked_add_tail(&_message_channels, channel, OFFSETOF(SVC_MESSAGE_CHANNEL_T, next));
-    message_channel_available();
     os_mutex_unlock(&_message_mutex);
 }
 
@@ -193,7 +179,6 @@ svc_message_channel_remove(SVC_MESSAGE_CHANNEL_T *channel)
 {
     os_mutex_lock(&_message_mutex);
     linked_remove(&_message_channels, channel, OFFSETOF(SVC_MESSAGE_CHANNEL_T, next));
-    message_channel_available();
     os_mutex_unlock(&_message_mutex);
 }
 
@@ -224,10 +209,4 @@ svc_message_wait_all(uint32_t timeout)
     }
 
     return _message_sending ? EFAIL : EOK;
-}
-
-SVC_MESSAGE_FILTER_T
-svc_message_get_filter(void)
-{
-    return _message_filter;
 }
