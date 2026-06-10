@@ -115,10 +115,10 @@ int32_t platform_getch(uint32_t timeout_ms);
 void platform_assert(const char *format);
 
 /**
- * @brief       Kicks the watchdog timer.
+ * @brief       Kicks the physical watchdog timer.
  * @details     Prevents the system from resetting due to watchdog timeout.
  *
- * @return      uint32_t Watchdog kick interval in milliseconds.
+ * @return      uint32_t Physical watchdog timeout in seconds, or 0 if unavailable.
  */
 uint32_t platform_wdt_kick(void);
 

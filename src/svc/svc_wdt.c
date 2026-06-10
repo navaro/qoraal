@@ -37,16 +37,48 @@
 #define SVC_WDT_FLAGS_FLAGGED               (1<<2)
 #define SVC_WDT_FLAGS_REPORTED              (1<<3)
 
+#define SVC_WDT_SCAN_INTERVAL_MS            5000U
+#define SVC_WDT_SEC2MS(sec)                 ((sec) * 1000U)
+
+static uint32_t svc_wdt_timeout_sec (SVC_WDT_TIMEOUTS_T id) ;
 
 #ifndef CFG_SVC_WDT_DISABLE_PLATFORM
 
 static void     svc_wdt_task_cb (SVC_TASKS_T *task, uintptr_t parm, uint32_t reason) ;
 static uint8_t  svc_wdt_process (SVC_WDT_TIMEOUTS_T id) ;
+static uint32_t svc_wdt_check_interval_ms (SVC_WDT_TIMEOUTS_T id) ;
+static uint32_t svc_wdt_hw_kick_interval_ms (uint32_t hw_timeout_sec) ;
+static uint32_t svc_wdt_task_interval_ms (void) ;
+static void     svc_wdt_set_hw_timeout (uint32_t hw_timeout_sec) ;
+static void     svc_wdt_reset_state (void) ;
+static int32_t  svc_wdt_schedule_next (void) ;
+static uint32_t svc_wdt_elapsed_ms (void) ;
+static uint8_t  svc_wdt_bucket_reported (SVC_WDT_TIMEOUTS_T id) ;
+static uint8_t  svc_wdt_process_bucket (SVC_WDT_TIMEOUTS_T id, uint32_t *elapsed_ms) ;
 
-static uint32_t             _svc_wdt_interval = 0 ;
+/*
+ * svc_wdt has two timing domains:
+ *
+ * - Software watchdog buckets are scanned at fixed intervals derived from
+ *   their bucket timeout. This keeps flagging/reporting behavior predictable.
+ *
+ * - The physical watchdog is kicked at half of the timeout returned by the
+ *   platform callback. This allows a longer hardware reset window without
+ *   changing software watchdog bucket semantics.
+ *
+ * Elapsed time is measured with os_sys_timestamp(). Unsigned subtraction keeps
+ * the delta correct across the 32-bit millisecond timestamp rollover.
+ */
+static uint32_t             _svc_wdt_hw_timeout_sec = 0 ;
+static uint32_t             _svc_wdt_hw_kick_interval_ms = 0 ;
+static uint32_t             _svc_wdt_task_interval_ms = SVC_WDT_SCAN_INTERVAL_MS ;
+static uint32_t             _svc_wdt_last_ms = 0 ;
+static uint32_t             _svc_wdt_hw_elapsed_ms = 0 ;
+static uint32_t             _svc_wdt_10_elapsed_ms = 0 ;
+static uint32_t             _svc_wdt_30_elapsed_ms = 0 ;
+static uint32_t             _svc_wdt_60_elapsed_ms = 0 ;
 static OS_MUTEX_DECL        (_svc_wdt_mutex) ;
 static stack_t              _svc_wdt_handler_stack[TIMEOUT_LAST] ;
-static uint32_t             _svc_wdt_counter = 0 ;
 static SVC_TASKS_DECL		(_svc_wdt_task)  ;
 #endif
 
@@ -81,12 +113,12 @@ int32_t
 svc_wdt_start (void)
 {
 #ifndef CFG_SVC_WDT_DISABLE_PLATFORM
-    _svc_wdt_interval = qoraal_wdt_kick () ;
+    svc_wdt_reset_state () ;
+    svc_wdt_set_hw_timeout (qoraal_wdt_kick ()) ;
 
-    if (_svc_wdt_interval) {
+    if (_svc_wdt_hw_timeout_sec) {
         svc_tasks_cancel (&_svc_wdt_task) ;
-        return svc_tasks_schedule (&_svc_wdt_task, svc_wdt_task_cb, 0, SERVICE_PRIO_QUEUE0, SVC_TASK_S2TICKS(_svc_wdt_interval/2)) ;
-
+        return svc_wdt_schedule_next () ;
     }
 
     return EOK ;
@@ -172,9 +204,15 @@ svc_wdt_unregister (SVC_WDT_HANDLE_T * handler, SVC_WDT_TIMEOUTS_T id)
 uint32_t
 svc_wdt_timeout (SVC_WDT_HANDLE_T * handler)
 {
-    if (handler->timeout == TIMEOUT_10_SEC) return 10 ;
-    else if (handler->timeout == TIMEOUT_30_SEC) return 30 ;
-    else if (handler->timeout == TIMEOUT_60_SEC) return 60 ;
+    return svc_wdt_timeout_sec (handler->timeout) ;
+}
+
+static uint32_t
+svc_wdt_timeout_sec (SVC_WDT_TIMEOUTS_T id)
+{
+    if (id == TIMEOUT_10_SEC) return 10 ;
+    else if (id == TIMEOUT_30_SEC) return 30 ;
+    else if (id == TIMEOUT_60_SEC) return 60 ;
     return 10 ;
 }
 
@@ -236,13 +274,84 @@ void
 svc_wdt_kick (void)
 {
 #ifndef CFG_SVC_WDT_DISABLE_PLATFORM
+    uint32_t hw_timeout_sec ;
+
     DBG_MESSAGE_SVC_WDT (DBG_MESSAGE_SEVERITY_INFO,
             "WDT   : : kick");
-    qoraal_wdt_kick () ;
+    hw_timeout_sec = qoraal_wdt_kick () ;
+
+    os_mutex_lock (&_svc_wdt_mutex) ;
+    svc_wdt_set_hw_timeout (hw_timeout_sec) ;
+    os_mutex_unlock (&_svc_wdt_mutex) ;
 #endif
 }
 
 #ifndef CFG_SVC_WDT_DISABLE_PLATFORM
+static uint32_t
+svc_wdt_check_interval_ms (SVC_WDT_TIMEOUTS_T id)
+{
+    uint32_t interval = SVC_WDT_SEC2MS(svc_wdt_timeout_sec (id)) / 2U ;
+    return interval ? interval : 1U ;
+}
+
+static uint32_t
+svc_wdt_hw_kick_interval_ms (uint32_t hw_timeout_sec)
+{
+    uint32_t interval = SVC_WDT_SEC2MS(hw_timeout_sec) / 2U ;
+    return interval ? interval : 1U ;
+}
+
+static uint32_t
+svc_wdt_task_interval_ms (void)
+{
+    if (_svc_wdt_hw_kick_interval_ms &&
+            (_svc_wdt_hw_kick_interval_ms < SVC_WDT_SCAN_INTERVAL_MS)) {
+        return _svc_wdt_hw_kick_interval_ms ;
+    }
+
+    return SVC_WDT_SCAN_INTERVAL_MS ;
+}
+
+static void
+svc_wdt_set_hw_timeout (uint32_t hw_timeout_sec)
+{
+    _svc_wdt_hw_timeout_sec = hw_timeout_sec ;
+    _svc_wdt_hw_kick_interval_ms = svc_wdt_hw_kick_interval_ms (hw_timeout_sec) ;
+    _svc_wdt_hw_elapsed_ms = 0 ;
+    _svc_wdt_last_ms = os_sys_timestamp () ;
+}
+
+static void
+svc_wdt_reset_state (void)
+{
+    _svc_wdt_10_elapsed_ms = 0 ;
+    _svc_wdt_30_elapsed_ms = 0 ;
+    _svc_wdt_60_elapsed_ms = 0 ;
+    _svc_wdt_last_ms = os_sys_timestamp () ;
+}
+
+static int32_t
+svc_wdt_schedule_next (void)
+{
+    if (!_svc_wdt_hw_timeout_sec) {
+        return EOK ;
+    }
+
+    _svc_wdt_task_interval_ms = svc_wdt_task_interval_ms () ;
+    return svc_tasks_schedule (&_svc_wdt_task, svc_wdt_task_cb, 0,
+            SERVICE_PRIO_QUEUE0, SVC_TASK_MS2TICKS(_svc_wdt_task_interval_ms)) ;
+}
+
+static uint32_t
+svc_wdt_elapsed_ms (void)
+{
+    uint32_t now_ms = os_sys_timestamp () ;
+    uint32_t elapsed_ms = now_ms - _svc_wdt_last_ms ;
+
+    _svc_wdt_last_ms = now_ms ;
+    return elapsed_ms ;
+}
+
 uint8_t
 svc_wdt_process (SVC_WDT_TIMEOUTS_T id)
 {
@@ -293,40 +402,73 @@ svc_wdt_process (SVC_WDT_TIMEOUTS_T id)
     return kick ;
 }
 
+static uint8_t
+svc_wdt_bucket_reported (SVC_WDT_TIMEOUTS_T id)
+{
+    SVC_WDT_HANDLE_T* start ;
+
+    for ( start = (SVC_WDT_HANDLE_T*)stack_head (&_svc_wdt_handler_stack[id]) ;
+        (start!=NULL_LLO)
+            ; ) {
+
+        if ((start->flags & SVC_WDT_FLAGS_ACTIVE) &&
+                (start->flags & SVC_WDT_FLAGS_REPORTED)) {
+            return 1 ;
+        }
+
+        start = (SVC_WDT_HANDLE_T*)stack_next ((plists_t)start, OFFSETOF(SVC_WDT_HANDLE_T, next));
+    }
+
+    return 0 ;
+}
+
+static uint8_t
+svc_wdt_process_bucket (SVC_WDT_TIMEOUTS_T id, uint32_t *elapsed_ms)
+{
+    uint32_t interval = svc_wdt_check_interval_ms (id) ;
+    uint8_t due = (*elapsed_ms >= interval) ;
+
+    if (due) {
+        *elapsed_ms %= interval ;
+        return svc_wdt_process (id) ;
+    }
+
+    return !svc_wdt_bucket_reported (id) ;
+}
+
 static void
 svc_wdt_task_cb (SVC_TASKS_T *task, uintptr_t parm, uint32_t reason)
 {
     if (reason == SERVICE_CALLBACK_REASON_RUN) {
-
-        static uint8_t kick10 = 1, kick30 = 1, kick60 = 1  ;
+        uint32_t elapsed_ms ;
+        uint8_t kick ;
         
         os_mutex_lock (&_svc_wdt_mutex) ;
-        _svc_wdt_counter++ ;
-        kick10 = svc_wdt_process (TIMEOUT_10_SEC) ;
-        /* Timeout values describe the full reset window, so we check twice per window. */
-        if (!kick30 || !(_svc_wdt_counter%(30/_svc_wdt_interval))) {
-            kick30 = svc_wdt_process (TIMEOUT_30_SEC) ;
-        }
-        if (!kick60 || !(_svc_wdt_counter%(60/_svc_wdt_interval))) {
-            kick60 = svc_wdt_process (TIMEOUT_60_SEC) ;
-        }
+        elapsed_ms = svc_wdt_elapsed_ms () ;
+        _svc_wdt_hw_elapsed_ms += elapsed_ms ;
+        _svc_wdt_10_elapsed_ms += elapsed_ms ;
+        _svc_wdt_30_elapsed_ms += elapsed_ms ;
+        _svc_wdt_60_elapsed_ms += elapsed_ms ;
 
-        if (kick10 && kick30 && kick60) {
-            _svc_wdt_interval =  qoraal_wdt_kick () ;
-            DBG_MESSAGE_SVC_WDT (DBG_MESSAGE_SEVERITY_INFO,
-                    "WDT   : : task kick");
+        kick = svc_wdt_process_bucket (TIMEOUT_10_SEC, &_svc_wdt_10_elapsed_ms) ;
+        kick &= svc_wdt_process_bucket (TIMEOUT_30_SEC, &_svc_wdt_30_elapsed_ms) ;
+        kick &= svc_wdt_process_bucket (TIMEOUT_60_SEC, &_svc_wdt_60_elapsed_ms) ;
 
-        } else {
-            DBG_MESSAGE_SVC_WDT (DBG_MESSAGE_SEVERITY_INFO,
-                    "WDT   : : task NOT kicked");
+        if (_svc_wdt_hw_elapsed_ms >= _svc_wdt_hw_kick_interval_ms) {
+            if (kick) {
+                svc_wdt_set_hw_timeout (qoraal_wdt_kick ()) ;
+                DBG_MESSAGE_SVC_WDT (DBG_MESSAGE_SEVERITY_INFO,
+                        "WDT   : : task kick");
 
+            } else {
+                DBG_MESSAGE_SVC_WDT (DBG_MESSAGE_SEVERITY_INFO,
+                        "WDT   : : task NOT kicked");
+
+            }
         }
         os_mutex_unlock (&_svc_wdt_mutex) ;
 
-        if (_svc_wdt_interval) {
-            svc_tasks_schedule (&_svc_wdt_task, svc_wdt_task_cb, 0, SERVICE_PRIO_QUEUE0, SVC_TASK_S2TICKS(_svc_wdt_interval/2)) ;
-
-        }
+        (void)svc_wdt_schedule_next () ;
 
     }
 

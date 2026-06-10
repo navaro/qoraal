@@ -89,8 +89,9 @@ typedef struct {
     uint32_t (*rand) (void);
 
     /**
-     * @brief Kick the WDT
-     * @return Seconds before wdt will reset
+     * @brief Kick the physical watchdog.
+     * @return Seconds before the physical watchdog resets the system,
+     *         or 0 when no physical watchdog is active.
      */
     uint32_t (*wdt_kick) (void);
 
