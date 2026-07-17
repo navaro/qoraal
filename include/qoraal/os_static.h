@@ -135,25 +135,35 @@ typedef struct k_event             os_event_t ;
 
 typedef struct os_zephyr_timer_wrapper {
     struct k_timer timer;
+    struct k_work delete_work;
     p_timer_function_t callback;
     void *callback_param;
+    bool heap;
 } os_timer_t ;
 #define OS_TIMER_DECL(htimer)       os_timer_t __aligned(Z_KERNEL_STACK_OBJ_ALIGN) __timer_##htimer = {0}; \
                                     p_timer_t htimer = (p_timer_t)&__timer_##htimer ;
 
+struct os_zephyr_thread;
+
+typedef struct os_zephyr_thread_context {
+    uint32_t                    magic;
+    k_tid_t                     tid;
+    struct os_zephyr_thread *   owner;
+    struct k_sem                thread_sem;
+    struct k_sem                notify_sem;
+    p_sem_t                     pthread_sem;
+    int32_t                     errno_val;
+    uint32_t                    tls_values[4];
+    uint32_t                    tls_bitmap;
+    int32_t                     notify_value;
+} os_zephyr_thread_context_t;
+
 struct os_zephyr_thread {
+    os_zephyr_thread_context_t context;
     struct k_thread     thread;
-    struct k_sem        join_sem;
-    struct k_sem        thread_sem;
-    struct k_sem        notify_sem;
-    p_sem_t             pthread_sem;
     p_thread_function_t entry;
     void *              arg;
     int                 heap;
-    int32_t             errno_val;
-    uint32_t            tls_values[4];
-    uint32_t            tls_bitmap;
-    int32_t             notify_value;
     k_thread_stack_t *  stack_mem;
     size_t              stack_size;
     atomic_t            terminated;
@@ -165,11 +175,12 @@ struct os_zephyr_thread {
 typedef struct os_zephyr_thread    os_thread_static_t ;
 
 #define OS_THREAD_WA_SIZE(stack_size) \
-    (sizeof(os_thread_static_t) + \
-     K_THREAD_STACK_LEN(stack_size) + Z_KERNEL_STACK_OBJ_ALIGN)
+    (sizeof(uint32_t) + __alignof__(os_thread_static_t) - 1U + \
+     sizeof(os_thread_static_t) + Z_KERNEL_STACK_OBJ_ALIGN - 1U + \
+     K_KERNEL_STACK_LEN(stack_size))
 
 #define OS_THREAD_WORKING_AREA(s, n) \
-    uint64_t s[(OS_THREAD_WA_SIZE(n) + sizeof (uint64_t))/ sizeof (uint64_t)]
+    uint32_t s[(OS_THREAD_WA_SIZE(n) + sizeof(uint32_t) - 1U) / sizeof(uint32_t)] = {(uint32_t)(n)}
 
 #elif defined CFG_OS_POSIX && CFG_OS_POSIX
 

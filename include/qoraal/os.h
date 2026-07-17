@@ -77,10 +77,10 @@
 /**
  * @name    Systick Conversion Macros
  * @{ */
-#define OS_S2TICKS(sec)             ((uint32_t)((uint32_t)(sec) * (uint32_t)OS_ST_FREQUENCY))
-#define OS_MS2TICKS(msec)           ((uint32_t)(((((uint32_t)(msec)) *  ((uint32_t)OS_ST_FREQUENCY)) + 999UL) / 1000UL))
-#define OS_TICKS2MS(ticks)          (((ticks) * 1000UL + OS_ST_FREQUENCY - 1UL) / OS_ST_FREQUENCY)
-#define OS_TICKS2S(ticks)           (((ticks) + OS_ST_FREQUENCY - 1UL) / OS_ST_FREQUENCY)
+#define OS_S2TICKS(sec)             ((uint32_t)((uint64_t)(sec) * (uint64_t)OS_ST_FREQUENCY))
+#define OS_MS2TICKS(msec)           ((uint32_t)((((uint64_t)(msec) * (uint64_t)OS_ST_FREQUENCY) + 999ULL) / 1000ULL))
+#define OS_TICKS2MS(ticks)          ((uint32_t)((((uint64_t)(ticks) * 1000ULL) + (uint64_t)OS_ST_FREQUENCY - 1ULL) / (uint64_t)OS_ST_FREQUENCY))
+#define OS_TICKS2S(ticks)           ((uint32_t)(((uint64_t)(ticks) + (uint64_t)OS_ST_FREQUENCY - 1ULL) / (uint64_t)OS_ST_FREQUENCY))
 /** @} */
 
 /**

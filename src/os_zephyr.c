@@ -25,6 +25,7 @@
 #if CFG_OS_ZEPHYR
 
 #include <zephyr/kernel.h>
+#include <zephyr/irq.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/spinlock.h>
 #include <string.h>
@@ -34,8 +35,10 @@
 #include "qoraal/qoraal.h"
 
 #define MAX_TLS_ID          4
+#define OS_THREAD_CONTEXT_MAGIC 0x514F5354U
 
 typedef struct os_zephyr_thread os_zephyr_thread_t;
+typedef struct os_zephyr_thread_context os_zephyr_thread_context_t;
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -43,8 +46,11 @@ typedef struct os_zephyr_thread os_zephyr_thread_t;
 
 static struct k_spinlock   _tls_lock;
 static uint32_t            _tls_alloc_bitmap;
-static os_zephyr_thread_t  _main_thread;
-static bool                _main_thread_ready;
+static Z_THREAD_LOCAL os_zephyr_thread_context_t *_current_context;
+static Z_THREAD_LOCAL os_zephyr_thread_context_t  _native_context;
+static Z_THREAD_LOCAL bool                         _native_context_ready;
+static Z_THREAD_LOCAL unsigned int                 _sys_lock_key;
+static Z_THREAD_LOCAL uint32_t                     _sys_lock_depth;
 
 
 /* --- Priority mapping: OS <-> Zephyr (preemptive only) --- */
@@ -74,9 +80,13 @@ static inline uint32_t z_map_kprio_to_os(int kprio)
     if (kprio <= k_hi) return 14U * 8U;    /* clamp to highest */
     if (kprio >= k_lo) return  1U * 8U;    /* clamp to lowest  */
 
-    /* Inverse of the linear map above (rounded) */
-    int num = (kprio - k_hi) * 13 + (span / 2);
-    int lvl = 14 - (span ? (num / span) : 0);
+    /*
+     * Invert floor(span * (14 - lvl) / 13) with a ceiling division.
+     * This guarantees that every priority produced by z_map_os_to_kprio()
+     * maps back to the original Qoraal priority.
+     */
+    int offset = kprio - k_hi;
+    int lvl = 14 - (span ? (int)DIV_ROUND_UP(offset * 13, span) : 0);
     if (lvl < 1)  lvl = 1;
     if (lvl > 14) lvl = 14;
     return (uint32_t)(lvl * 8);
@@ -106,18 +116,18 @@ os_zephyr_thread_layout(void *workspace, size_t workspace_size, size_t stack_siz
     const size_t total_size = workspace_size;
     uint8_t *base = (uint8_t *)workspace;
 
-    // Optional header behavior remains for dynamic callers that want it
-    if (stack_size > 0U) {
-        if (write_header) {
-            ((uint32_t *)base)[0] = (uint32_t)stack_size;
-        }
-        base += sizeof(uint32_t);
-        workspace_size -= sizeof(uint32_t);
+    if (write_header) {
+        ((uint32_t *)base)[0] = (uint32_t)stack_size;
     } else {
-        // Static WA path: ignore header; use entire WA after the 4B cell
-        base += sizeof(uint32_t);
-        workspace_size -= sizeof(uint32_t);
+        stack_size = ((const uint32_t *)base)[0];
     }
+
+    if (stack_size == 0U) {
+        return NULL;
+    }
+
+    base += sizeof(uint32_t);
+    workspace_size -= sizeof(uint32_t);
 
     const uintptr_t ws_start = (uintptr_t)base;
     const uintptr_t ws_end   = ws_start + workspace_size;
@@ -126,48 +136,26 @@ os_zephyr_thread_layout(void *workspace, size_t workspace_size, size_t stack_siz
     uintptr_t thread_addr = ROUND_UP(ws_start, __alignof__(os_zephyr_thread_t));
     uintptr_t after_thread = thread_addr + sizeof(os_zephyr_thread_t);
 
-    // Compute stack buffer:
-    // - dynamic: reserve K_THREAD_STACK_LEN(user_size)
-    // - static : take all remaining bytes, aligned, and anchor at end
-    size_t stack_len;
-    uintptr_t stack_addr;
-
-    if (stack_size > 0U) {
-        stack_len  = K_THREAD_STACK_LEN(stack_size);
-        stack_addr = ROUND_UP(after_thread, Z_KERNEL_STACK_OBJ_ALIGN);
-        uintptr_t required_end = stack_addr + stack_len;
-        if (required_end > ws_end) {
-            return NULL;
-        }
-    } else {
-        // Consume all remaining space for the stack, start it at the END of WA
-        uintptr_t tmp_end = ws_end;
-        // Align end down for stack object alignment
-        tmp_end = ROUND_DOWN(tmp_end, Z_KERNEL_STACK_OBJ_ALIGN);
-
-        // Start address is end - len. First, figure out how much we *can* take.
-        // Ensure thread object fits before the stack (stack at end).
-        if (after_thread > tmp_end) {
-            return NULL;
-        }
-        stack_len = (size_t)(tmp_end - after_thread);
-        // Align stack_len down to object alignment granularity
-        stack_len = ROUND_DOWN(stack_len, Z_KERNEL_STACK_OBJ_ALIGN);
-        if (stack_len == 0U) {
-            return NULL;
-        }
-        stack_addr = tmp_end - stack_len;
+    /*
+     * Qoraal threads are supervisor threads, so allocate a kernel stack
+     * object. Keep stack_size as the requested usable size passed to
+     * k_thread_create(); passing the adjusted object size would make Zephyr
+     * apply stack reservations a second time.
+     */
+    size_t stack_obj_len = K_KERNEL_STACK_LEN(stack_size);
+    uintptr_t stack_addr = ROUND_UP(after_thread, Z_KERNEL_STACK_OBJ_ALIGN);
+    uintptr_t required_end = stack_addr + stack_obj_len;
+    if (required_end > ws_end) {
+        return NULL;
     }
 
-    // Zero the control block and stack area we own
-    memset((void *)thread_addr, 0, ws_end - thread_addr);
+    memset((void *)thread_addr, 0, required_end - thread_addr);
 
     os_zephyr_thread_t *thread = (os_zephyr_thread_t *)thread_addr;
     thread->stack_mem     = (k_thread_stack_t *)stack_addr;
-    thread->stack_size    = stack_len;                 // <-- store BYTES we pass to k_thread_create
+    thread->stack_size    = stack_size;
     thread->workspace_base = workspace;
     thread->workspace_size = total_size;
-    thread->pthread_sem   = (p_sem_t)&thread->thread_sem;
 
     return thread;
 }
@@ -192,47 +180,45 @@ os_zephyr_thread_alloc(size_t stack_size)
 }
 
 static void
+os_zephyr_context_init(os_zephyr_thread_context_t *context,
+                       k_tid_t tid, os_zephyr_thread_t *owner)
+{
+    memset(context, 0, sizeof(*context));
+    context->magic = OS_THREAD_CONTEXT_MAGIC;
+    context->tid = tid;
+    context->owner = owner;
+    k_sem_init(&context->thread_sem, 0, K_SEM_MAX_LIMIT);
+    k_sem_init(&context->notify_sem, 0, K_SEM_MAX_LIMIT);
+    context->pthread_sem = (p_sem_t)&context->thread_sem;
+}
+
+static void
 os_zephyr_thread_common_init(os_zephyr_thread_t *thread)
 {
-    k_sem_init(&thread->join_sem, 0, 1);
-    k_sem_init(&thread->thread_sem, 0, K_SEM_MAX_LIMIT);
-    k_sem_init(&thread->notify_sem, 0, K_SEM_MAX_LIMIT);
-    thread->pthread_sem = (p_sem_t)&thread->thread_sem;
-    thread->errno_val = 0;
-    thread->tls_bitmap = 0;
-    thread->notify_value = 0;
+    os_zephyr_context_init(&thread->context, &thread->thread, thread);
     atomic_set(&thread->terminated, 0);
 }
 
 static void
-os_zephyr_thread_set_current(os_zephyr_thread_t *thread)
+os_zephyr_thread_set_current(os_zephyr_thread_context_t *context)
 {
-    k_thread_custom_data_set(thread);
+    _current_context = context;
 }
 
-static os_zephyr_thread_t *
+static os_zephyr_thread_context_t *
 os_zephyr_thread_get_current(void)
 {
-    os_zephyr_thread_t *thread = k_thread_custom_data_get();
-
-    if (thread) {
-        return thread;
+    if (_current_context) {
+        return _current_context;
     }
 
-    if (!_main_thread_ready) {
-        memset(&_main_thread, 0, sizeof(_main_thread));
-        os_zephyr_thread_common_init(&_main_thread);
-        _main_thread.heap = 0;
-        _main_thread.workspace_base = NULL;
-        _main_thread.workspace_size = 0;
-        _main_thread.stack_mem = NULL;
-        _main_thread.stack_size = 0;
-        _main_thread.name = k_thread_name_get(k_current_get());
-        _main_thread_ready = true;
+    if (!_native_context_ready) {
+        os_zephyr_context_init(&_native_context, k_current_get(), NULL);
+        _native_context_ready = true;
     }
 
-    os_zephyr_thread_set_current(&_main_thread);
-    return &_main_thread;
+    _current_context = &_native_context;
+    return _current_context;
 }
 
 static void
@@ -242,23 +228,25 @@ os_zephyr_thread_entry(void *p1, void *p2, void *p3)
     ARG_UNUSED(p3);
 
     os_zephyr_thread_t *thread = (os_zephyr_thread_t *)p1;
-    os_zephyr_thread_set_current(thread);
+    os_zephyr_thread_set_current(&thread->context);
 
     if (thread->entry) {
         thread->entry(thread->arg);
     }
 
     atomic_set(&thread->terminated, 1);
-    k_sem_give(&thread->join_sem);
 }
 
-static inline os_zephyr_thread_t *
+static inline os_zephyr_thread_context_t *
 os_zephyr_thread_from_handle(p_thread_t *handle)
 {
     if (!handle || !(*handle)) {
         return NULL;
     }
-    return (os_zephyr_thread_t *)(*handle);
+
+    os_zephyr_thread_context_t *context =
+        (os_zephyr_thread_context_t *)(*handle);
+    return context->magic == OS_THREAD_CONTEXT_MAGIC ? context : NULL;
 }
 
 static inline k_timeout_t
@@ -289,13 +277,19 @@ os_sys_started(void)
 void
 os_sys_lock(void)
 {
-    k_sched_lock();
+    if (_sys_lock_depth++ == 0U) {
+        _sys_lock_key = irq_lock();
+    }
 }
 
 void
 os_sys_unlock(void)
 {
-    k_sched_unlock();
+    __ASSERT(_sys_lock_depth > 0U, "unbalanced os_sys_unlock");
+
+    if (--_sys_lock_depth == 0U) {
+        irq_unlock(_sys_lock_key);
+    }
 }
 
 uint32_t
@@ -349,18 +343,16 @@ int32_t
 os_thread_create(uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
                  void *arg, p_thread_t *thread_handle, const char *name)
 {
-    if (stack_size == 0U) {
+    if (!thread_handle || stack_size == 0U) {
         if (thread_handle) {
             *thread_handle = NULL;
         }
         return E_PARM;
     }
+    *thread_handle = NULL;
 
     os_zephyr_thread_t *thread = os_zephyr_thread_alloc(stack_size);
     if (!thread) {
-        if (thread_handle) {
-            *thread_handle = NULL;
-        }
         return E_NOMEM;
     }
 
@@ -376,13 +368,10 @@ os_thread_create(uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
                                   thread, NULL, NULL,
                                   z_map_os_to_kprio(prio),
                                   0,
-                                  K_NO_WAIT);
+                                  K_FOREVER);
 
     if (!tid) {
         qoraal_free(QORAAL_HeapOperatingSystem, thread->workspace_base);
-        if (thread_handle) {
-            *thread_handle = NULL;
-        }
         return EFAIL;
     }
 
@@ -390,10 +379,10 @@ os_thread_create(uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
         k_thread_name_set(tid, name);
     }
 
-    if (thread_handle) {
-        *thread_handle = (p_thread_t)thread;
-    }
+    thread->context.tid = tid;
+    *thread_handle = (p_thread_t)&thread->context;
 
+    k_thread_start(tid);
     return EOK;
 }
 
@@ -425,7 +414,7 @@ os_thread_create_static(void *wsp, uint16_t size, uint32_t prio,
                                   thread, NULL, NULL,
                                   z_map_os_to_kprio(prio),
                                   0,
-                                  K_NO_WAIT);
+                                  K_FOREVER);
     if (!tid) {
         if (thread_handle) {
             *thread_handle = NULL;
@@ -437,26 +426,29 @@ os_thread_create_static(void *wsp, uint16_t size, uint32_t prio,
         k_thread_name_set(tid, name);
     }
 
+    thread->context.tid = tid;
     if (thread_handle) {
-        *thread_handle = (p_thread_t)thread;
+        *thread_handle = (p_thread_t)&thread->context;
     }
 
+    k_thread_start(tid);
     return EOK;
 }
 
 const char *
 os_thread_get_name(p_thread_t *thread_handle)
 {
-    os_zephyr_thread_t *thread = os_zephyr_thread_from_handle(thread_handle);
-    if (!thread) {
+    os_zephyr_thread_context_t *context =
+        os_zephyr_thread_from_handle(thread_handle);
+    if (!context) {
         return NULL;
     }
 
-    const char *name = k_thread_name_get(&thread->thread);
+    const char *name = k_thread_name_get(context->tid);
     if (name) {
         return name;
     }
-    return thread->name;
+    return context->owner ? context->owner->name : NULL;
 }
 
 p_thread_t
@@ -486,15 +478,18 @@ os_thread_join(p_thread_t *thread_handle)
 int32_t
 os_thread_join_timeout(p_thread_t *thread_handle, uint32_t ticks)
 {
-    os_zephyr_thread_t *thread = os_zephyr_thread_from_handle(thread_handle);
-    if (!thread) {
+    os_zephyr_thread_context_t *context =
+        os_zephyr_thread_from_handle(thread_handle);
+    if (!context || !context->owner ||
+        context->tid == k_current_get()) {
         return E_PARM;
     }
 
-    int rc = k_sem_take(&thread->join_sem, os_zephyr_timeout_from_ticks(ticks));
-    
+    int rc = k_thread_join(context->tid,
+                           os_zephyr_timeout_from_ticks(ticks));
+
     if (rc == 0) {
-        os_thread_release (thread_handle);
+        os_thread_release(thread_handle);
         return EOK;
     }
     return E_TIMEOUT;
@@ -503,25 +498,31 @@ os_thread_join_timeout(p_thread_t *thread_handle, uint32_t ticks)
 void
 os_thread_release(p_thread_t *thread_handle)
 {
-    os_zephyr_thread_t *thread = os_zephyr_thread_from_handle(thread_handle);
-    if (!thread) {
+    os_zephyr_thread_context_t *context =
+        os_zephyr_thread_from_handle(thread_handle);
+    if (!context || !context->owner) {
+        return;
+    }
+
+    os_zephyr_thread_t *thread = context->owner;
+
+    if (context->tid == k_current_get()) {
+        __ASSERT(false, "a thread cannot release its own resources");
         return;
     }
 
     if (!atomic_get(&thread->terminated)) {
-        k_thread_abort(&thread->thread);
+        k_thread_abort(context->tid);
         atomic_set(&thread->terminated, 1);
-        k_sem_give(&thread->join_sem);
     }
 
+    (void)k_thread_join(context->tid, K_FOREVER);
 
     if (thread->heap && thread->workspace_base) {
         qoraal_free(QORAAL_HeapOperatingSystem, thread->workspace_base);
     }
 
-    if (thread_handle) {
-        *thread_handle = NULL;
-    }
+    *thread_handle = NULL;
 }
 
 uint32_t
@@ -539,8 +540,12 @@ os_thread_set_prio(p_thread_t *thread_handle, uint32_t prio)
     if (!thread_handle || !(*thread_handle)) {
         target = k_current_get();
     } else {
-        os_zephyr_thread_t *thread = (os_zephyr_thread_t *)(*thread_handle);
-        target = &thread->thread;
+        os_zephyr_thread_context_t *context =
+            os_zephyr_thread_from_handle(thread_handle);
+        if (!context) {
+            return 0U;
+        }
+        target = context->tid;
     }
 
     int old = k_thread_priority_get(target);
@@ -584,52 +589,58 @@ os_thread_tls_free(int32_t index)
 int32_t
 os_thread_tls_set(int32_t idx, uint32_t value)
 {
-    os_zephyr_thread_t *thread = os_zephyr_thread_get_current();
-    if (!thread || idx < 0 || idx >= MAX_TLS_ID) {
+    os_zephyr_thread_context_t *context =
+        os_zephyr_thread_get_current();
+    if (!context || idx < 0 || idx >= MAX_TLS_ID) {
         return E_PARM;
     }
 
-    thread->tls_values[idx] = value;
-    thread->tls_bitmap |= (1U << idx);
+    context->tls_values[idx] = value;
+    context->tls_bitmap |= (1U << idx);
     return EOK;
 }
 
 uint32_t
 os_thread_tls_get(int32_t idx)
 {
-    os_zephyr_thread_t *thread = os_zephyr_thread_get_current();
-    if (!thread || idx < 0 || idx >= MAX_TLS_ID) {
+    os_zephyr_thread_context_t *context =
+        os_zephyr_thread_get_current();
+    if (!context || idx < 0 || idx >= MAX_TLS_ID) {
         return 0;
     }
 
-    if (!(thread->tls_bitmap & (1U << idx))) {
+    if (!(context->tls_bitmap & (1U << idx))) {
         return 0;
     }
 
-    return thread->tls_values[idx];
+    return context->tls_values[idx];
 }
 
 p_sem_t *
 os_thread_thdsem_get(void)
 {
-    os_zephyr_thread_t *thread = os_zephyr_thread_get_current();
-    return &thread->pthread_sem;
+    os_zephyr_thread_context_t *context =
+        os_zephyr_thread_get_current();
+    return &context->pthread_sem;
 }
 
 int32_t *
 os_thread_errno(void)
 {
-    os_zephyr_thread_t *thread = os_zephyr_thread_get_current();
-    return &thread->errno_val;
+    os_zephyr_thread_context_t *context =
+        os_zephyr_thread_get_current();
+    return &context->errno_val;
 }
 
 int32_t
 os_thread_wait(uint32_t ticks)
 {
-    os_zephyr_thread_t *thread = os_zephyr_thread_get_current();
-    int rc = k_sem_take(&thread->notify_sem, os_zephyr_timeout_from_ticks(ticks));
+    os_zephyr_thread_context_t *context =
+        os_zephyr_thread_get_current();
+    int rc = k_sem_take(&context->notify_sem,
+                        os_zephyr_timeout_from_ticks(ticks));
     if (rc == 0) {
-        return thread->notify_value;
+        return context->notify_value;
     }
     if (rc == -EAGAIN || rc == -EBUSY) {
         return E_TIMEOUT;
@@ -640,13 +651,14 @@ os_thread_wait(uint32_t ticks)
 int32_t
 os_thread_notify(p_thread_t *thread_handle, int32_t msg)
 {
-    os_zephyr_thread_t *thread = os_zephyr_thread_from_handle(thread_handle);
-    if (!thread) {
+    os_zephyr_thread_context_t *context =
+        os_zephyr_thread_from_handle(thread_handle);
+    if (!context) {
         return E_PARM;
     }
 
-    thread->notify_value = msg;
-    k_sem_give(&thread->notify_sem);
+    context->notify_value = msg;
+    k_sem_give(&context->notify_sem);
     return EOK;
 }
 
@@ -742,6 +754,23 @@ os_sem_configure(struct k_sem *ksem, int32_t count, uint32_t limit)
     return rc == 0 ? EOK : EFAIL;
 }
 
+static int32_t
+os_sem_reset_count(struct k_sem *ksem, int32_t count, uint32_t limit)
+{
+    if (count < 0) {
+        count = 0;
+    }
+    if ((uint32_t)count > limit) {
+        count = (int32_t)limit;
+    }
+
+    k_sem_reset(ksem);
+    while (count-- > 0) {
+        k_sem_give(ksem);
+    }
+    return EOK;
+}
+
 int32_t
 os_sem_create(p_sem_t *sem, int32_t cnt)
 {
@@ -791,7 +820,7 @@ os_sem_reset(p_sem_t *sem, int32_t cnt)
         return E_PARM;
     }
     struct k_sem *ksem = (struct k_sem *)(*sem);
-    return os_sem_configure(ksem, cnt, K_SEM_MAX_LIMIT);
+    return os_sem_reset_count(ksem, cnt, K_SEM_MAX_LIMIT);
 }
 
 int32_t
@@ -903,7 +932,7 @@ os_bsem_reset(p_sem_t *sem, int32_t taken)
         return E_PARM;
     }
     struct k_sem *ksem = (struct k_sem *)(*sem);
-    return os_bsem_configure(ksem, taken);
+    return os_sem_reset_count(ksem, taken ? 0 : 1, 1U);
 }
 
 int32_t
@@ -981,11 +1010,15 @@ static uint32_t
 os_event_wait_common(struct k_event *kevent, uint32_t clear_on_exit, uint32_t mask,
                      uint32_t all, k_timeout_t timeout)
 {
-    uint32_t events = k_event_wait(kevent, mask, all != 0U, timeout);
-    if (events && clear_on_exit) {
-        k_event_clear(kevent, clear_on_exit);
+    if (all) {
+        return clear_on_exit
+            ? k_event_wait_all_safe(kevent, mask, false, timeout)
+            : k_event_wait_all(kevent, mask, false, timeout);
     }
-    return events;
+
+    return clear_on_exit
+        ? k_event_wait_safe(kevent, mask, false, timeout)
+        : k_event_wait(kevent, mask, false, timeout);
 }
 
 uint32_t
@@ -1051,6 +1084,15 @@ os_timer_expiry_handler(struct k_timer *ktimer)
     }
 }
 
+static void
+os_timer_delete_work_handler(struct k_work *work)
+{
+    os_zephyr_timer_t *wrapper =
+        CONTAINER_OF(work, os_zephyr_timer_t, delete_work);
+
+    qoraal_free(QORAAL_HeapOperatingSystem, wrapper);
+}
+
 static os_zephyr_timer_t *
 os_timer_from_handle(p_timer_t *timer)
 {
@@ -1063,17 +1105,22 @@ os_timer_from_handle(p_timer_t *timer)
 int32_t
 os_timer_create(p_timer_t *timer, p_timer_function_t fp, void *parm)
 {
+    if (!timer) {
+        return E_PARM;
+    }
+
     os_zephyr_timer_t *wrapper = qoraal_malloc(QORAAL_HeapOperatingSystem, sizeof(os_zephyr_timer_t));
     if (!wrapper) {
-        if (timer) {
-            *timer = NULL;
-        }
+        *timer = NULL;
         return E_NOMEM;
     }
 
+    memset(wrapper, 0, sizeof(*wrapper));
     k_timer_init(&wrapper->timer, os_timer_expiry_handler, NULL);
+    k_work_init(&wrapper->delete_work, os_timer_delete_work_handler);
     wrapper->callback = fp;
     wrapper->callback_param = parm;
+    wrapper->heap = true;
     *timer = (p_timer_t)wrapper;
     return EOK;
 }
@@ -1085,9 +1132,13 @@ os_timer_delete(p_timer_t *timer)
     if (!wrapper) {
         return;
     }
+
     k_timer_stop(&wrapper->timer);
-    qoraal_free(QORAAL_HeapOperatingSystem, wrapper);
     *timer = NULL;
+
+    if (wrapper->heap) {
+        (void)k_work_submit(&wrapper->delete_work);
+    }
 }
 
 int32_t
@@ -1098,8 +1149,10 @@ os_timer_init(p_timer_t *timer, p_timer_function_t fp, void *parm)
         return E_PARM;
     }
     k_timer_init(&wrapper->timer, os_timer_expiry_handler, NULL);
+    k_work_init(&wrapper->delete_work, os_timer_delete_work_handler);
     wrapper->callback = fp;
     wrapper->callback_param = parm;
+    wrapper->heap = false;
     return EOK;
 }
 

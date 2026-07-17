@@ -3,6 +3,18 @@ menu "Qoraal"
 config QORAAL
     bool "Enable Qoraal framework"
     default n
+    depends on MULTITHREADING
+    depends on ARCH_HAS_THREAD_LOCAL_STORAGE
+    depends on NUM_PREEMPT_PRIORITIES >= 14
+    depends on !SMP
+    select EVENTS
+    select THREAD_LOCAL_STORAGE
+    select THREAD_NAME
+    help
+      Enable the Qoraal framework Zephyr port. The current port requires
+      thread-local storage and at least 14 preemptive priority levels. SMP is
+      intentionally unsupported until Qoraal's higher-level global data
+      structures are made SMP-safe.
 
 if QORAAL
 
