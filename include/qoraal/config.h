@@ -83,9 +83,13 @@
 #define CFG_SVC_TASK_CFG_MAX             3
 #endif
 #if !(defined CFG_SVC_TASK_CFG_DEFAULT)
-#define CFG_SVC_TASK_CFG_DEFAULT    {OS_THREAD_PRIO_11, 1024*2, "svc-task0", TIMEOUT_10_SEC}    \
+#define CFG_SVC_TASK_CFG_DEFAULT    {OS_THREAD_PRIO_10, 1024*2, "svc-task0", TIMEOUT_10_SEC}    \
                                     ,{OS_THREAD_PRIO_6, 1024*6, "svc-task1", TIMEOUT_30_SEC}    \
-                                    ,{OS_THREAD_PRIO_5, 1024*4, "svc-task2", TIMEOUT_10_SEC}    
+                                    ,{OS_THREAD_PRIO_2, 1024*4, "svc-task2", TIMEOUT_10_SEC}
+#endif
+
+#if !(defined CFG_SVC_EVENTS_THREAD_PRIO)
+#define CFG_SVC_EVENTS_THREAD_PRIO       OS_THREAD_PRIO_11
 #endif
 
 #if !(defined CFG_CONSOLE_PROMPT)

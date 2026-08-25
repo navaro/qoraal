@@ -61,9 +61,9 @@ static inline int z_map_os_to_kprio(int os_prio)
     if (lvl < 1)  lvl = 1;
     if (lvl > 14) lvl = 14;
 
-    /* Zephyr preemptive app range */
-    const int k_hi = K_HIGHEST_APPLICATION_THREAD_PRIO;     /* usually 0 */
-    const int k_lo = K_LOWEST_APPLICATION_THREAD_PRIO;      /* non-neg */
+    /* Keep all Qoraal threads in Zephyr's preemptive priority range. */
+    const int k_hi = K_PRIO_PREEMPT(0);
+    const int k_lo = K_PRIO_PREEMPT(CONFIG_NUM_PREEMPT_PRIORITIES - 1);
     const int span = (k_lo - k_hi) > 0 ? (k_lo - k_hi) : 0;
 
     /* lvl=14 -> highest (k_hi), lvl=1 -> lowest (k_lo), linear in between */
@@ -73,8 +73,8 @@ static inline int z_map_os_to_kprio(int os_prio)
 
 static inline uint32_t z_map_kprio_to_os(int kprio)
 {
-    const int k_hi = K_HIGHEST_APPLICATION_THREAD_PRIO;
-    const int k_lo = K_LOWEST_APPLICATION_THREAD_PRIO;
+    const int k_hi = K_PRIO_PREEMPT(0);
+    const int k_lo = K_PRIO_PREEMPT(CONFIG_NUM_PREEMPT_PRIORITIES - 1);
     const int span = (k_lo - k_hi) > 0 ? (k_lo - k_hi) : 0;
 
     if (kprio <= k_hi) return 14U * 8U;    /* clamp to highest */

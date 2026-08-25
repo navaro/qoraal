@@ -73,11 +73,21 @@ svc_events_thread(void *arg)
                     (start!=NULL_LLO)
                         ; ) {
 
-                    start->fp (eid, start->ctx) ;
+                    SVC_EVENTS_CALLBACK_T fp = start->fp ;
+                    void *ctx = start->ctx ;
                     start = (SVC_EVENTS_HANDLER_T*)stack_next ((plists_t)start, OFFSETOF(SVC_EVENTS_HANDLER_T, next));
 
-                }
+#if !defined CFG_OS_MUTEX_DISABLE
+                    os_mutex_unlock (&_svc_events_mutex) ;
+#endif
 
+                    fp (eid, ctx) ;
+
+#if !defined CFG_OS_MUTEX_DISABLE
+                    os_mutex_lock (&_svc_events_mutex) ;
+#endif
+
+                }
 
             }
             eid++;
@@ -171,7 +181,7 @@ svc_events_start (void)
     _events_stop = false ;
 #if !CFG_OS_OS_LESS
     return os_thread_create_static (wa_svc_events_thread, sizeof(wa_svc_events_thread),
-            OS_THREAD_PRIO_HIGHEST, svc_events_thread,
+            CFG_SVC_EVENTS_THREAD_PRIO, svc_events_thread,
             0, &_svc_events_thread, "svc-events") ;
 #endif
     return EOK ;
