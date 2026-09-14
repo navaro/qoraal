@@ -66,6 +66,20 @@ typedef struct SVC_WDT_HANDLE_S {
     SVC_WDT_TIMEOUTS_T timeout ;
 } SVC_WDT_HANDLE_T ;
 
+/**
+ * @brief   Notified when a handler is flagged for missing its kick.
+ *
+ * Flagging is the first miss, one scan interval before the handler is
+ * reported and the physical watchdog stops being kicked. That makes it the
+ * last point at which there is still time to do something about it - save
+ * state, raise a counter - while the system is still running normally.
+ *
+ * Called from the watchdog task with no lock held, so the handler may block,
+ * but it delays the next scan for as long as it runs. One call per scan, no
+ * matter how many handlers were flagged in it.
+ */
+typedef void (*SVC_WDT_FLAGGED_CB_T)(SVC_WDT_HANDLE_T * handler) ;
+
 
 /*===========================================================================*/
 /* External declarations.                                                    */
@@ -89,6 +103,8 @@ extern "C" {
     void                    svc_wdt_handler_kick (SVC_WDT_HANDLE_T * handler) ;
 
     void                    svc_wdt_kick (void) ;
+
+    void                    svc_wdt_set_flagged_cb (SVC_WDT_FLAGGED_CB_T cb) ;
 
 #ifdef __cplusplus
 }

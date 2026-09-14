@@ -78,6 +78,13 @@ static uint32_t             _svc_wdt_10_elapsed_ms = 0 ;
 static uint32_t             _svc_wdt_30_elapsed_ms = 0 ;
 static uint32_t             _svc_wdt_60_elapsed_ms = 0 ;
 static OS_MUTEX_DECL        (_svc_wdt_mutex) ;
+/*
+ * Set by the scan when a handler is flagged, consumed by the task once the
+ * mutex is dropped. Kept out of svc_wdt_reset_state() on purpose: the
+ * registration outlives a stop/start of the service.
+ */
+static SVC_WDT_FLAGGED_CB_T _svc_wdt_flagged_cb = 0 ;
+static SVC_WDT_HANDLE_T *   _svc_wdt_flagged = 0 ;
 static stack_t              _svc_wdt_handler_stack[TIMEOUT_LAST] ;
 static SVC_TASKS_DECL		(_svc_wdt_task)  ;
 #endif
@@ -138,6 +145,28 @@ svc_wdt_stop (void)
 {
 #ifndef CFG_SVC_WDT_DISABLE_PLATFORM
     svc_tasks_cancel (&_svc_wdt_task) ;
+
+#endif
+    return ;
+}
+
+/**
+ * @brief   Register the handler called when a wdt handler is flagged.
+ *
+ * @param[in] cb            Callback, or 0 to unregister.
+ *
+ * @svc
+ */
+void
+svc_wdt_set_flagged_cb (SVC_WDT_FLAGGED_CB_T cb)
+{
+#ifndef CFG_SVC_WDT_DISABLE_PLATFORM
+    os_mutex_lock (&_svc_wdt_mutex) ;
+    _svc_wdt_flagged_cb = cb ;
+    os_mutex_unlock (&_svc_wdt_mutex) ;
+
+#else
+    (void)cb ;
 
 #endif
     return ;
@@ -385,6 +414,7 @@ svc_wdt_process (SVC_WDT_TIMEOUTS_T id)
                 } else {
 
                     start->flags |= SVC_WDT_FLAGS_FLAGGED ;
+                    _svc_wdt_flagged = start ;
                     DBG_MESSAGE_SVC_WDT (DBG_MESSAGE_SEVERITY_LOG,
                             "WDT   : : flagging '%s' (0x%x)",
                             os_thread_get_name(&start->thread), start->id) ;
@@ -442,7 +472,8 @@ svc_wdt_task_cb (SVC_TASKS_T *task, uintptr_t parm, uint32_t reason)
     if (reason == SERVICE_CALLBACK_REASON_RUN) {
         uint32_t elapsed_ms ;
         uint8_t kick ;
-        
+        SVC_WDT_HANDLE_T * flagged ;
+
         os_mutex_lock (&_svc_wdt_mutex) ;
         elapsed_ms = svc_wdt_elapsed_ms () ;
         _svc_wdt_hw_elapsed_ms += elapsed_ms ;
@@ -466,7 +497,18 @@ svc_wdt_task_cb (SVC_TASKS_T *task, uintptr_t parm, uint32_t reason)
 
             }
         }
+        flagged = _svc_wdt_flagged ;
+        _svc_wdt_flagged = 0 ;
         os_mutex_unlock (&_svc_wdt_mutex) ;
+
+        /*
+         * Outside the lock. The handler may do something slow - writing to
+         * flash is the reason this hook exists - and every thread that kicks
+         * the watchdog needs this mutex to do it.
+         */
+        if (flagged && _svc_wdt_flagged_cb) {
+            _svc_wdt_flagged_cb (flagged) ;
+        }
 
         (void)svc_wdt_schedule_next () ;
 
