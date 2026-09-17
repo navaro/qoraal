@@ -389,6 +389,8 @@ svc_tasks_service_task ( linked_t* task_list, int thd_count, SVC_WDT_HANDLE_T * 
         svc_wdt_set_id (hwdt, (uintptr_t)callback) ;
         os_sys_unlock();
 
+        /* Give each callback a fresh watchdog interval while draining the queue. */
+        svc_wdt_handler_kick (hwdt) ;
         callback (start, parm, SERVICE_CALLBACK_REASON_RUN) ;
 
         os_sys_lock();
