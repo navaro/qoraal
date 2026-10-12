@@ -73,6 +73,17 @@ int32_t platform_init(uint32_t flash_size);
 int32_t platform_start(void);
 
 /**
+ * @brief       Runs start-up work that needs the services.
+ * @details     Called by the application after qoraal_start_default()
+ *              returns: every autostart service has completed
+ *              SVC_SERVICE_CTRL_START and the service task threads are
+ *              running, so events posted here reach their sinks.
+ *
+ * @return      int32_t Status code (EOK on success).
+ */
+int32_t platform_services_started(void);
+
+/**
  * @brief       Stops platform services.
  * @details     Stops registry and logging services, and releases 
  *              allocated memory.
