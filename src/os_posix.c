@@ -92,6 +92,7 @@ typedef struct OS_THREAD_WA_S {
         pthread_mutex_t                 suspend_mutex ;
         pthread_cond_t                  suspend_cond ;
         int32_t                         suspend_msg ;
+        uint32_t                        suspend_count ;  /* notifies not yet taken */
 
         p_thread_function_t             pf ;
         uint32_t                        tls[MAX_TLS_ID] ;
@@ -110,11 +111,6 @@ task_start (void * arg)
     if (g_posix_wa_key_init) {
         pthread_setspecific(g_posix_wa_key, wa);
     }
-
-    /* Initialize these in creation or here? Let's do them here. */
-    pthread_mutex_init(&wa->suspend_mutex, NULL);
-    pthread_cond_init(&wa->suspend_cond, NULL);
-        wa->suspend_msg = 0 ;
 
     /* Actually run user function. */
     wa->pf (wa->arg) ;
@@ -192,6 +188,11 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
             return EFAIL;
         }
 
+        /* The handle is returned before the thread first runs and can be
+           notified straight away, so the notify state is set up here. */
+        pthread_mutex_init(&wa->suspend_mutex, NULL);
+        pthread_cond_init(&wa->suspend_cond, NULL);
+
     /* Initialize attributes if you want to set priority. 
        Realistically, setting sched_priority requires root privileges on many systems,
        so don’t be shocked if this fails or is ignored. */
@@ -206,6 +207,8 @@ os_thread_create (uint16_t stack_size, uint32_t prio, p_thread_function_t pf,
     pthread_attr_destroy(&tattr);
 
     if (ret != 0) {
+        pthread_cond_destroy(&wa->suspend_cond);
+        pthread_mutex_destroy(&wa->suspend_mutex);
         sem_destroy(&wa->join_sem);
         qoraal_free(QORAAL_HeapOperatingSystem, wa);
         return EFAIL;
@@ -261,6 +264,10 @@ os_thread_create_static (void *wsp, uint16_t size, uint32_t prio,
         return EFAIL;
     }
 
+    /* Set up before the thread exists, as in os_thread_create(). */
+    pthread_mutex_init(&wa->suspend_mutex, NULL);
+    pthread_cond_init(&wa->suspend_cond, NULL);
+
     pthread_attr_init(&tattr);
 #if 1
     pthread_attr_getschedparam(&tattr, &param);
@@ -272,6 +279,8 @@ os_thread_create_static (void *wsp, uint16_t size, uint32_t prio,
     pthread_attr_destroy(&tattr);
 
     if (ret != 0) {
+        pthread_cond_destroy(&wa->suspend_cond);
+        pthread_mutex_destroy(&wa->suspend_mutex);
         sem_destroy(&wa->join_sem);
         return EFAIL;
     }
@@ -515,15 +524,20 @@ int32_t
 os_thread_wait (uint32_t ticks)
 {
     int32_t res;
+    int rc = 0;
     OS_THREAD_WA_T  * wa = pthread_getspecific(g_posix_wa_key);
     if (!wa) {
         return E_NOIMPL;
     }
     pthread_mutex_lock(&wa->suspend_mutex);
+    /* Notifies are counted, as in the Zephyr and FreeRTOS ports, so one sent
+       while this thread was not waiting is taken here instead of being lost.
+       The loops also ride out spurious wake-ups. */
     if (ticks == OS_TIME_INFINITE) {
         /* indefinite wait */
-        pthread_cond_wait(&wa->suspend_cond, &wa->suspend_mutex);
-        res = wa->suspend_msg;
+        while (!wa->suspend_count) {
+            pthread_cond_wait(&wa->suspend_cond, &wa->suspend_mutex);
+        }
     } else {
         struct timespec t;
         struct timeval  now;
@@ -533,14 +547,17 @@ os_thread_wait (uint32_t ticks)
         t.tv_sec        = now.tv_sec + (ms / 1000) + (nsec / 1000000000ULL);
         t.tv_nsec       = (long)(nsec % 1000000000ULL);
 
-        int rc = pthread_cond_timedwait(&wa->suspend_cond, &wa->suspend_mutex, &t);
-        if (rc == 0) {
-            res = wa->suspend_msg;
-        } else if (rc == ETIMEDOUT) {
-            res = E_TIMEOUT;
-        } else {
-            res = EFAIL;
+        while (!wa->suspend_count && (rc == 0)) {
+            rc = pthread_cond_timedwait(&wa->suspend_cond, &wa->suspend_mutex, &t);
         }
+    }
+    if (wa->suspend_count) {
+        wa->suspend_count--;
+        res = wa->suspend_msg;
+    } else if (rc == ETIMEDOUT) {
+        res = E_TIMEOUT;
+    } else {
+        res = EFAIL;
     }
     pthread_mutex_unlock(&wa->suspend_mutex);
     return res;
@@ -554,6 +571,7 @@ os_thread_notify (p_thread_t* thread, int32_t msg)
 
     pthread_mutex_lock (&wa->suspend_mutex);
     wa->suspend_msg = msg ;
+    wa->suspend_count++ ;
     pthread_cond_signal (&wa->suspend_cond);
     pthread_mutex_unlock (&wa->suspend_mutex);
     return EOK ;
