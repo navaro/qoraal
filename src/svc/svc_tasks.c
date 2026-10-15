@@ -422,7 +422,12 @@ svc_tasks_service_task ( linked_t* task_list, int thd_count, SVC_WDT_HANDLE_T * 
 void
 svc_tasks_complete (SVC_TASKS_T* task)
 {
+    /* Take the mutex like every other status change. Without it, a thread
+     * that schedules this task between the read and the write below gets
+     * its QUEUED status overwritten while the task is already in a list. */
+    os_mutex_lock (&_svc_task_mutex) ;
     task->status &= ~SERVICE_STATUS_ACTIVE_BIT ;
+    os_mutex_unlock (&_svc_task_mutex) ;
     if (task->flags & SVC_TASKS_FLAGS_WAITABLE) {
         p_event_t event = ((SVC_WAITABLE_TASKS_T*)task)->event ;
         os_event_signal (&event, 1) ;
