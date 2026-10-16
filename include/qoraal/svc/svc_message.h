@@ -22,22 +22,24 @@ typedef uint64_t SVC_MESSAGE_MASK_T;
 /*
  * Route layout (SVC_MESSAGE_MASK_T, 64 bits):
  *
- * bits  0..31   message flags/class/severity/qos
- * bits 32..63   module/source bitmask (up to 32 modules, each bit corresponds to a module ID)
+ * bits  0..19   message flags used for routing (SVC_MESSAGE_FLAGS_MASK)
+ * bits 20..51   module/source bitmask (up to 32 modules, each bit corresponds to a module ID)
+ * bits 52..63   unused
  *
  * Message flags layout (SVC_MESSAGE_T::flags, 32 bits):
  *
- * bits  0..3    user/local flags       ┐
- * bits  4..7    class                  │ used for routing (SVC_MESSAGE_FLAGS_MASK)
- * bits  8..11   severity               │
- * bits 12..15   qos                    ┘
- * bits 16..31   application-defined    — stored in message, ignored by routing
+ * bits  0..3    user/local flags 0..3  ┐
+ * bits  4..7    class                  │
+ * bits  8..11   severity               │ used for routing (SVC_MESSAGE_FLAGS_MASK)
+ * bits 12..15   qos                    │
+ * bits 16..19   user/local flags 4..7  ┘
+ * bits 20..31   application-defined    — stored in message, ignored by routing
  */
 
-#define SVC_MESSAGE_FLAGS_BITS         16
+#define SVC_MESSAGE_FLAGS_BITS         20
 #define SVC_MESSAGE_FLAGS_MASK         ((SVC_MESSAGE_MASK_T)((1ULL << SVC_MESSAGE_FLAGS_BITS) - 1ULL))
 
-#define SVC_MESSAGE_APP_FLAGS_MASK     ((uint32_t)0xFFFF0000U)
+#define SVC_MESSAGE_APP_FLAGS_MASK     ((uint32_t)0xFFF00000U)
 
 #define SVC_MESSAGE_MODULE_BITS        32
 #define SVC_MESSAGE_MODULE_SHIFT       SVC_MESSAGE_FLAGS_BITS
@@ -56,10 +58,21 @@ typedef uint64_t SVC_MESSAGE_MASK_T;
 #define SVC_MESSAGE_FLAG_2             ((uint32_t)(1U << (SVC_MESSAGE_FLAG_SHIFT + 2)))
 #define SVC_MESSAGE_FLAG_3             ((uint32_t)(1U << (SVC_MESSAGE_FLAG_SHIFT + 3)))
 
+/* Flags 4..7 sit above the qos bits, so class, severity and qos keep their positions. */
+#define SVC_MESSAGE_FLAG_HIGH_SHIFT    16
+#define SVC_MESSAGE_FLAG_4             ((uint32_t)(1U << (SVC_MESSAGE_FLAG_HIGH_SHIFT + 0)))
+#define SVC_MESSAGE_FLAG_5             ((uint32_t)(1U << (SVC_MESSAGE_FLAG_HIGH_SHIFT + 1)))
+#define SVC_MESSAGE_FLAG_6             ((uint32_t)(1U << (SVC_MESSAGE_FLAG_HIGH_SHIFT + 2)))
+#define SVC_MESSAGE_FLAG_7             ((uint32_t)(1U << (SVC_MESSAGE_FLAG_HIGH_SHIFT + 3)))
+
 #define SVC_MESSAGE_FLAG_MASK          ((uint32_t)(SVC_MESSAGE_FLAG_0 |         \
                                                    SVC_MESSAGE_FLAG_1 |         \
                                                    SVC_MESSAGE_FLAG_2 |         \
-                                                   SVC_MESSAGE_FLAG_3))
+                                                   SVC_MESSAGE_FLAG_3 |         \
+                                                   SVC_MESSAGE_FLAG_4 |         \
+                                                   SVC_MESSAGE_FLAG_5 |         \
+                                                   SVC_MESSAGE_FLAG_6 |         \
+                                                   SVC_MESSAGE_FLAG_7))
 
 /* Message class bits */
 #define SVC_MESSAGE_CLASS_SHIFT        4
