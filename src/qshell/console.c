@@ -83,6 +83,7 @@ static LOGGER_CHANNEL_T     _shell_log_channel = { .fp = console_logger_cb, .use
 #define CONSOLE_HISTORY_DEPTH   8
 #define CONSOLE_HISTORY_LEN     256
 #define CONSOLE_PUSHBACK_EMPTY  (-2)
+#define CONSOLE_ESC_SEQ_MAX     8      /* longest escape sequence read and dropped */
 
 static char     _history[CONSOLE_HISTORY_DEPTH][CONSOLE_HISTORY_LEN] ;
 static uint32_t _history_count = 0 ;   /* number of valid entries (<= DEPTH) */
@@ -101,6 +102,16 @@ console_history_getch (void)
         return c ;
     }
     return qoraal_getch (1000) ;
+}
+
+/* With the console echo off the platform echoes printable keys itself, as the
+ * POSIX and Windows test platforms do. Erase the `n` bytes it echoed for a
+ * dropped key sequence. */
+static void
+console_erase_echo (uint32_t n)
+{
+    if (_console_echo_on) return ;
+    while (n--) qoraal_print ("\b \b") ;
 }
 
 /* Store a finished line in the history ring (skips empty lines). */
@@ -353,26 +364,39 @@ int32_t console_get_line(char *buffer, uint32_t len)
             continue;
         }
 
-        /* Escape sequences: up/down arrows arrive as ESC [ A / ESC [ B. */
+        /* Escape sequences. Up/down arrows arrive as ESC [ A / ESC [ B, or
+         * ESC O A / ESC O B in application cursor mode. Every other sequence
+         * (left/right, Home, End, Delete, ...) is read to its final byte and
+         * dropped, so none of it ends up in the command line. */
         if (c == 27) {
+            uint32_t seq = 1 ;
             int c2 = console_history_getch () ;
-            if (c2 != '[') {
-                _history_pushback = c2 ;    /* not a CSI sequence: replay it */
+            if (c2 != '[' && c2 != 'O') {
+                _history_pushback = c2 ;    /* lone ESC: drop it, replay the next key */
                 continue ;
             }
             c2 = console_history_getch () ;
-            if (c2 == 'A') console_history_browse (+1, buffer, len, &i, 2) ;
-            else if (c2 == 'B') console_history_browse (-1, buffer, len, &i, 2) ;
-            else _history_pushback = c2 ;   /* unknown CSI: replay final byte */
+            /* CSI parameter and intermediate bytes are 0x20..0x3F */
+            while (c2 >= 0x20 && c2 <= 0x3F && seq < CONSOLE_ESC_SEQ_MAX) {
+                seq++ ;
+                c2 = console_history_getch () ;
+            }
+            if (c2 > 0 && c2 < 0x20) _history_pushback = c2 ; /* a control key cut it short */
+            else if (c2 > 0) seq++ ;
+            if (seq == 2 && c2 == 'A') console_history_browse (+1, buffer, len, &i, seq) ;
+            else if (seq == 2 && c2 == 'B') console_history_browse (-1, buffer, len, &i, seq) ;
+            else console_erase_echo (seq) ;
             continue ;
         }
 #if defined _WIN32
-        /* Windows console: arrows arrive as 0x00/0xE0 + scan code (72/80). */
-        if (c == 0 || c == 224) {
+        /* Windows console: arrows arrive as 0xE0 + scan code (72/80). The
+         * numpad arrows send 0x00 first, which the c <= 0 check above has
+         * already dropped as "no key". */
+        if (c == 224) {
             int c2 = console_history_getch () ;
             if (c2 == 72) console_history_browse (+1, buffer, len, &i, 1) ;
             else if (c2 == 80) console_history_browse (-1, buffer, len, &i, 1) ;
-            else _history_pushback = c2 ;
+            else if (c2 >= 0x20 && c2 < 0x7F) console_erase_echo (1) ;
             continue ;
         }
 #endif
