@@ -58,6 +58,7 @@ bool                _console_echo_on =
 /*===========================================================================*/
 static void     console_logger_cb (void* channel, LOGGER_TYPE_T type, uint8_t facility, const char* msg) ;
 static int32_t  console_out (void* ctx, uint32_t out, const char* str);
+static int32_t  console_print (const char * str) ;
 static int32_t  console_get_line (char * buffer, uint32_t len) ;
 
 
@@ -77,6 +78,161 @@ int qshell_uart_init(void) ;
 
 static bool                 _shell_exit = false ;
 static LOGGER_CHANNEL_T     _shell_log_channel = { .fp = console_logger_cb, .user = (void*)0, .filter = { { .mask = SVC_LOGGER_MASK, .type = SVC_LOGGER_SEVERITY_LOG | SVC_LOGGER_FLAGS_PROGRESS }, {0,0} } };
+
+/* ---- command history (last CFG_CONSOLE_HISTORY_DEPTH commands, browsable with up/down arrows) ---- */
+#define CONSOLE_LINE_LEN        256    /* command line buffer, terminator included */
+#define CONSOLE_HISTORY_DEPTH   CFG_CONSOLE_HISTORY_DEPTH
+#define CONSOLE_HISTORY_LEN     CFG_CONSOLE_HISTORY_LEN   /* longest command stored */
+#define CONSOLE_PUSHBACK_EMPTY  (-2)
+#define CONSOLE_ESC_SEQ_MAX     8      /* longest escape sequence read and dropped */
+
+static int32_t  _history_nav = -1 ;    /* -1 = not browsing, else 0 = newest ... */
+static int32_t  _history_pushback = CONSOLE_PUSHBACK_EMPTY ; /* one-char pushback for key sequences */
+#if CONSOLE_HISTORY_DEPTH > 0
+static char     _history[CONSOLE_HISTORY_DEPTH][CONSOLE_HISTORY_LEN + 1] ;
+static uint32_t _history_count = 0 ;   /* number of valid entries (<= DEPTH) */
+static uint32_t _history_head = 0 ;    /* slot where the NEXT entry goes */
+static char     _history_scratch[CONSOLE_LINE_LEN] ; /* uncommitted line saved while browsing */
+#endif
+
+/* Read one char, honouring the single-char pushback buffer. */
+static int
+console_history_getch (void)
+{
+    if (_history_pushback != CONSOLE_PUSHBACK_EMPTY) {
+        int c = _history_pushback ;
+        _history_pushback = CONSOLE_PUSHBACK_EMPTY ;
+        return c ;
+    }
+    return qoraal_getch (1000) ;
+}
+
+/* With the console echo off the platform echoes printable keys itself, as the
+ * POSIX and Windows test platforms do. Erase the `n` bytes it echoed for a
+ * dropped key sequence. */
+static void
+console_erase_echo (uint32_t n)
+{
+    if (_console_echo_on) return ;
+    while (n--) qoraal_print ("\b \b") ;
+}
+
+#if CONSOLE_HISTORY_DEPTH > 0
+
+/* Store a finished line in the history ring. Empty lines are skipped, and so
+ * are lines longer than CONSOLE_HISTORY_LEN: recalling a cut-off command and
+ * pressing Enter would run something else than was typed. */
+static void
+console_history_add (const char * line)
+{
+    const char * newest ;
+    size_t n ;
+    if (!line) return ;
+    n = strlen (line) ;
+    while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) n-- ;
+    if (n == 0 || n > CONSOLE_HISTORY_LEN) return ;
+    newest = _history[(_history_head + CONSOLE_HISTORY_DEPTH - 1) % CONSOLE_HISTORY_DEPTH] ;
+    if (_history_count > 0 &&       /* a repeat of the newest entry is not stored again */
+            strncmp (newest, line, n) == 0 && newest[n] == 0) {
+        return ;
+    }
+    memcpy (_history[_history_head], line, n) ;
+    _history[_history_head][n] = 0 ;
+    _history_head = (_history_head + 1) % CONSOLE_HISTORY_DEPTH ;
+    if (_history_count < CONSOLE_HISTORY_DEPTH) _history_count++ ;
+}
+
+/* Fetch a history entry by age: 0 = newest. Returns 0 when out of range. */
+static const char *
+console_history_get (int32_t age)
+{
+    uint32_t idx ;
+    if (age < 0 || (uint32_t)age >= _history_count) return 0 ;
+    idx = (_history_head + CONSOLE_HISTORY_DEPTH - 1 - (uint32_t)age) % CONSOLE_HISTORY_DEPTH ;
+    return _history[idx] ;
+}
+
+/* Redraw the input line in a terminal-agnostic way: CR, blank the old
+ * content (plus `extra` bytes the platform may already have echoed for the
+ * key sequence), CR, prompt, new text.
+ * NOTE: everything is emitted as ONE console_print() call. console_print()
+ * routes each call through the debug-log prefix ("[%5d] "), so per-char
+ * prints would spray the prefix once per character. */
+/* Room for CR, blanks over the prompt and the old line (plus echo slack), CR,
+ * the prompt again, the new text and the terminator. */
+#define CONSOLE_REDRAW_LEN  (2 * sizeof (SHELL_PROMPT) + 2 * CONSOLE_LINE_LEN + CONSOLE_ESC_SEQ_MAX + 4)
+
+/* Append up to `n` bytes of `src` at `pos`, always leaving room for the
+ * terminator. Returns the new position. */
+static uint32_t
+console_redraw_put (char * dst, uint32_t pos, const char * src, uint32_t n)
+{
+    if (n > CONSOLE_REDRAW_LEN - 1 - pos) n = CONSOLE_REDRAW_LEN - 1 - pos ;
+    memcpy (&dst[pos], src, n) ;
+    return pos + n ;
+}
+
+static void
+console_history_redraw (const char * text, uint32_t old_len)
+{
+    static char redraw[CONSOLE_REDRAW_LEN] ;
+    uint32_t prompt_n = (uint32_t)strlen (SHELL_PROMPT) ;
+    uint32_t clear_n = prompt_n + old_len + 2 ;
+    uint32_t pos = 0 ;
+    redraw[pos++] = '\r' ;
+    while (clear_n-- && pos + 2 < CONSOLE_REDRAW_LEN) redraw[pos++] = ' ' ;
+    redraw[pos++] = '\r' ;
+    pos = console_redraw_put (redraw, pos, SHELL_PROMPT, prompt_n) ;
+    if (text) pos = console_redraw_put (redraw, pos, text, (uint32_t)strlen (text)) ;
+    redraw[pos] = 0 ;
+    console_print (redraw) ;
+}
+
+/* Browse history: dir > 0 recalls older (up), dir < 0 recalls newer (down).
+ * Updates the edit buffer (*pi) and redraws the line. `extra` = number of
+ * bytes the platform may already have echoed for the key sequence. */
+static void
+console_history_browse (int dir, char * buffer, uint32_t len, uint32_t * pi, uint32_t extra)
+{
+    const char * entry = 0 ;
+    uint32_t old_len = *pi + extra ;
+    uint32_t n = 0 ;
+    if (_history_count == 0) return ;
+    if (dir > 0) {                          /* up: older command */
+        if (_history_nav < 0) {
+            strncpy (_history_scratch, buffer, CONSOLE_LINE_LEN - 1) ;
+            _history_scratch[CONSOLE_LINE_LEN - 1] = 0 ;
+            _history_nav = 0 ;
+        } else if (_history_nav + 1 < (int32_t)_history_count) {
+            _history_nav++ ;
+        }
+        entry = console_history_get (_history_nav) ;
+    } else {                                /* down: newer command */
+        if (_history_nav > 0) {
+            _history_nav-- ;
+            entry = console_history_get (_history_nav) ;
+        } else if (_history_nav == 0) {
+            _history_nav = -1 ;
+            entry = _history_scratch ;      /* restore the uncommitted line */
+        } else {
+            return ;                        /* not browsing: ignore */
+        }
+    }
+    if (!entry) entry = "" ;
+    while (entry[n] && n + 1 < len) {
+        buffer[n] = entry[n] ;
+        n++ ;
+    }
+    *pi = n ;
+    buffer[n] = 0 ;
+    console_history_redraw (buffer, old_len) ;
+}
+#else
+/* History compiled out: arrow keys are still read and dropped. */
+#define console_history_add(line)                               ((void)(line))
+#define console_history_browse(dir, buffer, len, pi, extra)     console_erase_echo (extra)
+#endif
+
 
 /*===========================================================================*/
 /* Service Functions                                                         */
@@ -168,7 +324,7 @@ console_service_run (uintptr_t arg)
     svc_shell_script_run (&qshell_cmd_if, "", "version", strlen("version")) ;
     svc_shell_script_run (&qshell_cmd_if, "", "hello", strlen("hello")) ;
     do {
-        char line[256];
+        char line[CONSOLE_LINE_LEN];
         console_print (SHELL_PROMPT) ;
         int len = console_get_line (line, sizeof(line)) ;
         if (!_shell_exit && len > 0) {
@@ -219,9 +375,12 @@ int32_t console_get_line(char *buffer, uint32_t len)
     uint32_t i = 0;
 
     if (!buffer || len == 0) return 0;
+    buffer[0] = 0;
+
+    _history_nav = -1 ; /* fresh line: not browsing history */
 
     while (i + 1 < len) {
-        int c = qoraal_getch(1000);
+        int c = console_history_getch ();
 
         if (_shell_exit) break;
 
@@ -229,6 +388,43 @@ int32_t console_get_line(char *buffer, uint32_t len)
             if (c == EOF) os_thread_sleep(1000);
             continue;
         }
+
+        /* Escape sequences. Up/down arrows arrive as ESC [ A / ESC [ B, or
+         * ESC O A / ESC O B in application cursor mode. Every other sequence
+         * (left/right, Home, End, Delete, ...) is read to its final byte and
+         * dropped, so none of it ends up in the command line. */
+        if (c == 27) {
+            uint32_t seq = 1 ;
+            int c2 = console_history_getch () ;
+            if (c2 != '[' && c2 != 'O') {
+                _history_pushback = c2 ;    /* lone ESC: drop it, replay the next key */
+                continue ;
+            }
+            c2 = console_history_getch () ;
+            /* CSI parameter and intermediate bytes are 0x20..0x3F */
+            while (c2 >= 0x20 && c2 <= 0x3F && seq < CONSOLE_ESC_SEQ_MAX) {
+                seq++ ;
+                c2 = console_history_getch () ;
+            }
+            if (c2 > 0 && c2 < 0x20) _history_pushback = c2 ; /* a control key cut it short */
+            else if (c2 > 0) seq++ ;
+            if (seq == 2 && c2 == 'A') console_history_browse (+1, buffer, len, &i, seq) ;
+            else if (seq == 2 && c2 == 'B') console_history_browse (-1, buffer, len, &i, seq) ;
+            else console_erase_echo (seq) ;
+            continue ;
+        }
+#if defined _WIN32
+        /* Windows console: arrows arrive as 0xE0 + scan code (72/80). The
+         * numpad arrows send 0x00 first, which the c <= 0 check above has
+         * already dropped as "no key". */
+        if (c == 224) {
+            int c2 = console_history_getch () ;
+            if (c2 == 72) console_history_browse (+1, buffer, len, &i, 1) ;
+            else if (c2 == 80) console_history_browse (-1, buffer, len, &i, 1) ;
+            else if (c2 >= 0x20 && c2 < 0x7F) console_erase_echo (1) ;
+            continue ;
+        }
+#endif
 
         /* swallow LF after CR across calls */
         if (swallow_lf) {
@@ -243,6 +439,7 @@ int32_t console_get_line(char *buffer, uint32_t len)
                 buffer[i] = 0;
                 if (_console_echo_on) qoraal_print("\b \b");   // erase visually
             }
+            _history_nav = -1 ; /* edited: leave history browsing */
             continue;
         }
 
@@ -265,8 +462,11 @@ int32_t console_get_line(char *buffer, uint32_t len)
         } else {
             if (_console_echo_on) qoraal_print(&buffer[i-1]);
         }
+        _history_nav = -1 ; /* typed: leave history browsing */
     }
 
+    buffer[i] = 0;
+    if (!_shell_exit) console_history_add (buffer) ;
     return (int32_t)i;
 }
 

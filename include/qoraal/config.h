@@ -95,3 +95,22 @@
 #if !(defined CFG_CONSOLE_PROMPT)
 #define CFG_CONSOLE_PROMPT              "[Qoraal] #> "
 #endif
+
+/* CFG_CONSOLE_HISTORY_DEPTH
+    Number of commands the console keeps for recall with the up and down
+    arrows. Each one costs CFG_CONSOLE_HISTORY_LEN + 1 bytes of RAM. 0 leaves
+    the history out.
+*/
+#if !(defined CFG_CONSOLE_HISTORY_DEPTH)
+#define CFG_CONSOLE_HISTORY_DEPTH       8
+#endif
+
+/* CFG_CONSOLE_HISTORY_LEN
+    Longest command, in characters, the console history stores. A longer
+    command is not stored at all rather than stored cut off, so recalling it
+    can never run something else than was typed. The shell line itself stays
+    255 characters.
+*/
+#if !(defined CFG_CONSOLE_HISTORY_LEN)
+#define CFG_CONSOLE_HISTORY_LEN         128
+#endif
