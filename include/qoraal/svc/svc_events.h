@@ -23,7 +23,7 @@
 
 /**
  * @file    svc_events.h
- * @brief   Events dispatcher in high priority thread from any context.
+ * @brief   Deferred event dispatcher callable from any context.
  * @details
  *
  * @addtogroup
