@@ -80,18 +80,19 @@ static bool                 _shell_exit = false ;
 static LOGGER_CHANNEL_T     _shell_log_channel = { .fp = console_logger_cb, .user = (void*)0, .filter = { { .mask = SVC_LOGGER_MASK, .type = SVC_LOGGER_SEVERITY_LOG | SVC_LOGGER_FLAGS_PROGRESS }, {0,0} } };
 
 /* ---- command history (last CFG_CONSOLE_HISTORY_DEPTH commands, browsable with up/down arrows) ---- */
+#define CONSOLE_LINE_LEN        256    /* command line buffer, terminator included */
 #define CONSOLE_HISTORY_DEPTH   CFG_CONSOLE_HISTORY_DEPTH
-#define CONSOLE_HISTORY_LEN     256
+#define CONSOLE_HISTORY_LEN     CFG_CONSOLE_HISTORY_LEN   /* longest command stored */
 #define CONSOLE_PUSHBACK_EMPTY  (-2)
 #define CONSOLE_ESC_SEQ_MAX     8      /* longest escape sequence read and dropped */
 
 static int32_t  _history_nav = -1 ;    /* -1 = not browsing, else 0 = newest ... */
 static int32_t  _history_pushback = CONSOLE_PUSHBACK_EMPTY ; /* one-char pushback for key sequences */
 #if CONSOLE_HISTORY_DEPTH > 0
-static char     _history[CONSOLE_HISTORY_DEPTH][CONSOLE_HISTORY_LEN] ;
+static char     _history[CONSOLE_HISTORY_DEPTH][CONSOLE_HISTORY_LEN + 1] ;
 static uint32_t _history_count = 0 ;   /* number of valid entries (<= DEPTH) */
 static uint32_t _history_head = 0 ;    /* slot where the NEXT entry goes */
-static char     _history_scratch[CONSOLE_HISTORY_LEN] ; /* uncommitted line saved while browsing */
+static char     _history_scratch[CONSOLE_LINE_LEN] ; /* uncommitted line saved while browsing */
 #endif
 
 /* Read one char, honouring the single-char pushback buffer. */
@@ -118,24 +119,25 @@ console_erase_echo (uint32_t n)
 
 #if CONSOLE_HISTORY_DEPTH > 0
 
-/* Store a finished line in the history ring (skips empty lines). */
+/* Store a finished line in the history ring. Empty lines are skipped, and so
+ * are lines longer than CONSOLE_HISTORY_LEN: recalling a cut-off command and
+ * pressing Enter would run something else than was typed. */
 static void
 console_history_add (const char * line)
 {
-    char tmp[CONSOLE_HISTORY_LEN] ;
+    const char * newest ;
     size_t n ;
-    if (!line || !line[0]) return ;
-    strncpy (tmp, line, sizeof (tmp) - 1) ;
-    tmp[sizeof (tmp) - 1] = 0 ;
-    n = strlen (tmp) ;
-    while (n > 0 && (tmp[n - 1] == '\n' || tmp[n - 1] == '\r')) tmp[--n] = 0 ;
-    if (tmp[0] == 0) return ;
+    if (!line) return ;
+    n = strlen (line) ;
+    while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) n-- ;
+    if (n == 0 || n > CONSOLE_HISTORY_LEN) return ;
+    newest = _history[(_history_head + CONSOLE_HISTORY_DEPTH - 1) % CONSOLE_HISTORY_DEPTH] ;
     if (_history_count > 0 &&       /* a repeat of the newest entry is not stored again */
-            strcmp (_history[(_history_head + CONSOLE_HISTORY_DEPTH - 1) % CONSOLE_HISTORY_DEPTH], tmp) == 0) {
+            strncmp (newest, line, n) == 0 && newest[n] == 0) {
         return ;
     }
-    strncpy (_history[_history_head], tmp, CONSOLE_HISTORY_LEN - 1) ;
-    _history[_history_head][CONSOLE_HISTORY_LEN - 1] = 0 ;
+    memcpy (_history[_history_head], line, n) ;
+    _history[_history_head][n] = 0 ;
     _history_head = (_history_head + 1) % CONSOLE_HISTORY_DEPTH ;
     if (_history_count < CONSOLE_HISTORY_DEPTH) _history_count++ ;
 }
@@ -158,7 +160,7 @@ console_history_get (int32_t age)
  * prints would spray the prefix once per character. */
 /* Room for CR, blanks over the prompt and the old line (plus echo slack), CR,
  * the prompt again, the new text and the terminator. */
-#define CONSOLE_REDRAW_LEN  (2 * sizeof (SHELL_PROMPT) + 2 * CONSOLE_HISTORY_LEN + CONSOLE_ESC_SEQ_MAX + 4)
+#define CONSOLE_REDRAW_LEN  (2 * sizeof (SHELL_PROMPT) + 2 * CONSOLE_LINE_LEN + CONSOLE_ESC_SEQ_MAX + 4)
 
 /* Append up to `n` bytes of `src` at `pos`, always leaving room for the
  * terminator. Returns the new position. */
@@ -198,8 +200,8 @@ console_history_browse (int dir, char * buffer, uint32_t len, uint32_t * pi, uin
     if (_history_count == 0) return ;
     if (dir > 0) {                          /* up: older command */
         if (_history_nav < 0) {
-            strncpy (_history_scratch, buffer, CONSOLE_HISTORY_LEN - 1) ;
-            _history_scratch[CONSOLE_HISTORY_LEN - 1] = 0 ;
+            strncpy (_history_scratch, buffer, CONSOLE_LINE_LEN - 1) ;
+            _history_scratch[CONSOLE_LINE_LEN - 1] = 0 ;
             _history_nav = 0 ;
         } else if (_history_nav + 1 < (int32_t)_history_count) {
             _history_nav++ ;
@@ -322,7 +324,7 @@ console_service_run (uintptr_t arg)
     svc_shell_script_run (&qshell_cmd_if, "", "version", strlen("version")) ;
     svc_shell_script_run (&qshell_cmd_if, "", "hello", strlen("hello")) ;
     do {
-        char line[256];
+        char line[CONSOLE_LINE_LEN];
         console_print (SHELL_PROMPT) ;
         int len = console_get_line (line, sizeof(line)) ;
         if (!_shell_exit && len > 0) {
