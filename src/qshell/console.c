@@ -148,22 +148,32 @@ console_history_get (int32_t age)
  * NOTE: everything is emitted as ONE console_print() call. console_print()
  * routes each call through the debug-log prefix ("[%5d] "), so per-char
  * prints would spray the prefix once per character. */
+/* Room for CR, blanks over the prompt and the old line (plus echo slack), CR,
+ * the prompt again, the new text and the terminator. */
+#define CONSOLE_REDRAW_LEN  (2 * sizeof (SHELL_PROMPT) + 2 * CONSOLE_HISTORY_LEN + CONSOLE_ESC_SEQ_MAX + 4)
+
+/* Append up to `n` bytes of `src` at `pos`, always leaving room for the
+ * terminator. Returns the new position. */
+static uint32_t
+console_redraw_put (char * dst, uint32_t pos, const char * src, uint32_t n)
+{
+    if (n > CONSOLE_REDRAW_LEN - 1 - pos) n = CONSOLE_REDRAW_LEN - 1 - pos ;
+    memcpy (&dst[pos], src, n) ;
+    return pos + n ;
+}
+
 static void
 console_history_redraw (const char * text, uint32_t old_len)
 {
-    /* prompt (16) + worst-case old line (256) + echo slack + text (256) + CRs */
-    static char redraw[576] ;
-    uint32_t clear_n, text_n, n, pos = 0 ;
-    clear_n = (uint32_t)strlen (SHELL_PROMPT) + old_len + 2 ;
-    if (clear_n > 300) clear_n = 300 ;
-    text_n = text ? (uint32_t)strlen (text) : 0 ;
-    if (text_n > CONSOLE_HISTORY_LEN - 1) text_n = CONSOLE_HISTORY_LEN - 1 ;
+    static char redraw[CONSOLE_REDRAW_LEN] ;
+    uint32_t prompt_n = (uint32_t)strlen (SHELL_PROMPT) ;
+    uint32_t clear_n = prompt_n + old_len + 2 ;
+    uint32_t pos = 0 ;
     redraw[pos++] = '\r' ;
-    for (n = 0 ; n < clear_n && pos + 1 < sizeof (redraw) ; n++) redraw[pos++] = ' ' ;
+    while (clear_n-- && pos + 2 < CONSOLE_REDRAW_LEN) redraw[pos++] = ' ' ;
     redraw[pos++] = '\r' ;
-    n = (uint32_t)strlen (SHELL_PROMPT) ;
-    memcpy (&redraw[pos], SHELL_PROMPT, n) ; pos += n ;
-    if (text) { memcpy (&redraw[pos], text, text_n) ; pos += text_n ; }
+    pos = console_redraw_put (redraw, pos, SHELL_PROMPT, prompt_n) ;
+    if (text) pos = console_redraw_put (redraw, pos, text, (uint32_t)strlen (text)) ;
     redraw[pos] = 0 ;
     console_print (redraw) ;
 }
