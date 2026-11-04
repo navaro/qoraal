@@ -79,18 +79,20 @@ int qshell_uart_init(void) ;
 static bool                 _shell_exit = false ;
 static LOGGER_CHANNEL_T     _shell_log_channel = { .fp = console_logger_cb, .user = (void*)0, .filter = { { .mask = SVC_LOGGER_MASK, .type = SVC_LOGGER_SEVERITY_LOG | SVC_LOGGER_FLAGS_PROGRESS }, {0,0} } };
 
-/* ---- command history (last 8 commands, browsable with up/down arrows) ---- */
-#define CONSOLE_HISTORY_DEPTH   8
+/* ---- command history (last CFG_CONSOLE_HISTORY_DEPTH commands, browsable with up/down arrows) ---- */
+#define CONSOLE_HISTORY_DEPTH   CFG_CONSOLE_HISTORY_DEPTH
 #define CONSOLE_HISTORY_LEN     256
 #define CONSOLE_PUSHBACK_EMPTY  (-2)
 #define CONSOLE_ESC_SEQ_MAX     8      /* longest escape sequence read and dropped */
 
+static int32_t  _history_nav = -1 ;    /* -1 = not browsing, else 0 = newest ... */
+static int32_t  _history_pushback = CONSOLE_PUSHBACK_EMPTY ; /* one-char pushback for key sequences */
+#if CONSOLE_HISTORY_DEPTH > 0
 static char     _history[CONSOLE_HISTORY_DEPTH][CONSOLE_HISTORY_LEN] ;
 static uint32_t _history_count = 0 ;   /* number of valid entries (<= DEPTH) */
 static uint32_t _history_head = 0 ;    /* slot where the NEXT entry goes */
 static char     _history_scratch[CONSOLE_HISTORY_LEN] ; /* uncommitted line saved while browsing */
-static int32_t  _history_nav = -1 ;    /* -1 = not browsing, else 0 = newest ... */
-static int32_t  _history_pushback = CONSOLE_PUSHBACK_EMPTY ; /* one-char pushback for key sequences */
+#endif
 
 /* Read one char, honouring the single-char pushback buffer. */
 static int
@@ -113,6 +115,8 @@ console_erase_echo (uint32_t n)
     if (_console_echo_on) return ;
     while (n--) qoraal_print ("\b \b") ;
 }
+
+#if CONSOLE_HISTORY_DEPTH > 0
 
 /* Store a finished line in the history ring (skips empty lines). */
 static void
@@ -217,6 +221,11 @@ console_history_browse (int dir, char * buffer, uint32_t len, uint32_t * pi, uin
     buffer[n] = 0 ;
     console_history_redraw (buffer, old_len) ;
 }
+#else
+/* History compiled out: arrow keys are still read and dropped. */
+#define console_history_add(line)                               ((void)(line))
+#define console_history_browse(dir, buffer, len, pi, extra)     console_erase_echo (extra)
+#endif
 
 
 /*===========================================================================*/

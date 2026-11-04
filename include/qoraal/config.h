@@ -95,3 +95,11 @@
 #if !(defined CFG_CONSOLE_PROMPT)
 #define CFG_CONSOLE_PROMPT              "[Qoraal] #> "
 #endif
+
+/* CFG_CONSOLE_HISTORY_DEPTH
+    Number of commands the console keeps for recall with the up and down
+    arrows. Each one costs 256 bytes of RAM. 0 leaves the history out.
+*/
+#if !(defined CFG_CONSOLE_HISTORY_DEPTH)
+#define CFG_CONSOLE_HISTORY_DEPTH       8
+#endif
