@@ -130,6 +130,10 @@ console_history_add (const char * line)
     n = strlen (tmp) ;
     while (n > 0 && (tmp[n - 1] == '\n' || tmp[n - 1] == '\r')) tmp[--n] = 0 ;
     if (tmp[0] == 0) return ;
+    if (_history_count > 0 &&       /* a repeat of the newest entry is not stored again */
+            strcmp (_history[(_history_head + CONSOLE_HISTORY_DEPTH - 1) % CONSOLE_HISTORY_DEPTH], tmp) == 0) {
+        return ;
+    }
     strncpy (_history[_history_head], tmp, CONSOLE_HISTORY_LEN - 1) ;
     _history[_history_head][CONSOLE_HISTORY_LEN - 1] = 0 ;
     _history_head = (_history_head + 1) % CONSOLE_HISTORY_DEPTH ;
