@@ -51,6 +51,8 @@ zephyr_compile_definitions(
 zephyr_compile_definitions_ifndef(CONFIG_QORAAL_QFS CFG_QFS_DISABLE=1)
 zephyr_compile_definitions_ifdef(CONFIG_QORAAL_SVC_EVENTS_SYSWORKQ CFG_SVC_EVENTS_SYSWORKQ=1)
 zephyr_compile_definitions(CFG_CONSOLE_PROMPT=CONFIG_QORAAL_QSHELL_PROMPT)
+zephyr_compile_definitions(CFG_CONSOLE_HISTORY_DEPTH=${CONFIG_QORAAL_QSHELL_HISTORY_DEPTH})
+zephyr_compile_definitions(CFG_CONSOLE_HISTORY_LEN=${CONFIG_QORAAL_QSHELL_HISTORY_LEN})
 
 
 zephyr_linker_sources(SECTIONS ${CMAKE_CURRENT_LIST_DIR}/rom.ld)
