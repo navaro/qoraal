@@ -18,6 +18,14 @@ config QORAAL
 
 if QORAAL
 
+config QORAAL_SVC_EVENTS_SYSWORKQ
+    bool "Dispatch service events on the system workqueue"
+    default n
+    help
+      Use Zephyr's system workqueue instead of a dedicated svc-events thread.
+      Event callbacks share the system workqueue's priority and stack, and
+      must finish promptly. Use svc_tasks for lengthy or blocking work.
+
 config QORAAL_QFS
     bool "Enable Qoraal file system"
     default y
