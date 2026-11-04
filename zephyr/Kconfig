@@ -34,6 +34,24 @@ config QORAAL_QSHELL_PROMPT
     string "Qoraal shell prompt"
     default "[Qoraal] #> "
 
+config QORAAL_QSHELL_HISTORY_DEPTH
+    int "Qoraal shell history depth"
+    default 8
+    range 0 255
+    help
+      Number of commands the shell keeps for recall with the up and down
+      arrows. Each one costs QORAAL_QSHELL_HISTORY_LEN + 1 bytes of RAM.
+      0 leaves the history out.
+
+config QORAAL_QSHELL_HISTORY_LEN
+    int "Longest command kept in the Qoraal shell history"
+    default 128
+    range 1 255
+    help
+      Longest command, in characters, the shell history stores. A longer
+      command is not stored at all rather than stored cut off. The shell
+      line itself stays 255 characters.
+
 endif # QORAAL
 
 endmenu
