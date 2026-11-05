@@ -12,6 +12,17 @@
 #define CFG_SVC_THREADS_DISABLE_IDLE    1
 #endif
 
+/* CFG_SVC_THREADS_IDLE_PRIO
+    Priority of the svc_threads_idle thread, which frees the stacks of
+    terminated svc_threads. At the lowest priority it only runs when nothing
+    else is ready, so under steady load the stacks of finished threads (web
+    server workers, for example) pile up in the heap. Give it the priority of
+    the service that creates the threads to free them as they finish.
+*/
+#if !(defined CFG_SVC_THREADS_IDLE_PRIO)
+#define CFG_SVC_THREADS_IDLE_PRIO       OS_THREAD_PRIO_LOWEST
+#endif
+
 
 /* CFG_SVC_WDT_DISABLE_PLATFORM
     If defined, platform does not support a watchdog, functions will be implemented as stubs only.

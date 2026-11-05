@@ -12,6 +12,26 @@ static int32_t              _message_sending = 0;
 static LISTS_LINKED_DECL    (_message_channels);
 static OS_MUTEX_DECL        (_message_mutex);
 
+/*
+ * _message_mutex guards the channel list only. It is not held while a
+ * channel callback runs, so a slow channel (a socket write, a flash erase)
+ * does not hold up posters or channel add/remove. All messages are
+ * delivered by the one svc_tasks queue set in svc_message_init(), so at
+ * most one callback runs at a time. Two pointers, read and written under
+ * the mutex, keep the list walk safe while it is unlocked:
+ *   _message_current  the channel whose callback is running. Removing it
+ *                     waits for the callback to return, so a channel that
+ *                     lives on its owner's stack is never used after the
+ *                     owner removed it.
+ *   _message_next     where the walk continues. Removing that channel moves
+ *                     it on to the channel after it.
+ */
+static SVC_MESSAGE_CHANNEL_T *  _message_current = 0;
+static SVC_MESSAGE_CHANNEL_T *  _message_next = 0;
+static p_thread_t               _message_dispatcher = 0;
+
+#define MESSAGE_REMOVE_POLL_MS      10
+
 static uint32_t
 message_channel_matches(const SVC_MESSAGE_CHANNEL_T *channel, SVC_MESSAGE_MASK_T route)
 {
@@ -36,16 +56,29 @@ message_task_callback(SVC_TASKS_T *task, uintptr_t parm, uint32_t reason)
         route = svc_message_route(message);
 
         os_mutex_lock(&_message_mutex);
+        _message_dispatcher = os_thread_current();
 
-        for (start = (SVC_MESSAGE_CHANNEL_T *)linked_head(&_message_channels);
-             start != NULL_LLO;
-             start = (SVC_MESSAGE_CHANNEL_T *)linked_next((plists_t)start, OFFSETOF(SVC_MESSAGE_CHANNEL_T, next))) {
+        start = (SVC_MESSAGE_CHANNEL_T *)linked_head(&_message_channels);
+        while (start != NULL_LLO) {
+            _message_next = (SVC_MESSAGE_CHANNEL_T *)linked_next((plists_t)start,
+                                OFFSETOF(SVC_MESSAGE_CHANNEL_T, next));
 
             if (message_channel_matches(start, route)) {
+                _message_current = start;
+                os_mutex_unlock(&_message_mutex);
+
                 start->fp(start->user, message);
+
+                os_mutex_lock(&_message_mutex);
+                _message_current = 0;
             }
+
+            /* svc_message_channel_remove() keeps _message_next valid. */
+            start = _message_next;
         }
 
+        _message_next = 0;
+        _message_dispatcher = 0;
         os_mutex_unlock(&_message_mutex);
     }
 
@@ -174,10 +207,29 @@ svc_message_channel_add(SVC_MESSAGE_CHANNEL_T *channel)
     os_mutex_unlock(&_message_mutex);
 }
 
+/**
+ * @brief   Remove a channel.
+ * @details If the channel's callback is running, this waits for it to
+ *          return, so the caller may free the channel afterwards. A callback
+ *          may remove its own channel; that does not wait.
+ */
 void
 svc_message_channel_remove(SVC_MESSAGE_CHANNEL_T *channel)
 {
     os_mutex_lock(&_message_mutex);
+
+    while ((channel == _message_current) &&
+           (_message_dispatcher != os_thread_current())) {
+        os_mutex_unlock(&_message_mutex);
+        os_thread_sleep(MESSAGE_REMOVE_POLL_MS);
+        os_mutex_lock(&_message_mutex);
+    }
+
+    if (channel == _message_next) {
+        _message_next = (SVC_MESSAGE_CHANNEL_T *)linked_next((plists_t)channel,
+                            OFFSETOF(SVC_MESSAGE_CHANNEL_T, next));
+    }
+
     linked_remove(&_message_channels, channel, OFFSETOF(SVC_MESSAGE_CHANNEL_T, next));
     os_mutex_unlock(&_message_mutex);
 }

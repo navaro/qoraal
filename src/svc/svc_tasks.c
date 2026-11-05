@@ -422,12 +422,14 @@ svc_tasks_service_task ( linked_t* task_list, int thd_count, SVC_WDT_HANDLE_T * 
 void
 svc_tasks_complete (SVC_TASKS_T* task)
 {
+    os_mutex_lock (&_svc_task_mutex) ;
     task->status &= ~SERVICE_STATUS_ACTIVE_BIT ;
     if (task->flags & SVC_TASKS_FLAGS_WAITABLE) {
         p_event_t event = ((SVC_WAITABLE_TASKS_T*)task)->event ;
         os_event_signal (&event, 1) ;
 
     }
+    os_mutex_unlock (&_svc_task_mutex) ;
 
 }
 
@@ -515,7 +517,6 @@ svc_tasks_schedule (SVC_TASKS_T* task, SVC_TASKS_CALLBACK_T callback, uintptr_t 
         linked_add_head (&_svc_tasks_list, task, OFFSETOF(SVC_TASKS_T, next)) ;
         _svc_tasks_list_count++ ;
 
-        os_mutex_unlock (&_svc_task_mutex) ;
 
         if (ticks) {
             os_timer_set (&_svc_tasks_virtual_timer, ticks) ;
@@ -524,6 +525,8 @@ svc_tasks_schedule (SVC_TASKS_T* task, SVC_TASKS_CALLBACK_T callback, uintptr_t 
             svc_tasks_task_event(SVC_EVENTS_TASK, 0) ;
 
         }
+
+        os_mutex_unlock (&_svc_task_mutex) ;
 
     } else {
 

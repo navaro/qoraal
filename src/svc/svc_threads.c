@@ -119,7 +119,7 @@ svc_threads_start (void)
     int32_t res ;
 
 #if !defined CFG_SVC_THREADS_DISABLE_IDLE
-    res = os_thread_create (1024, OS_THREAD_PRIO_LOWEST, svc_threads_idle,
+    res = os_thread_create (1024, CFG_SVC_THREADS_IDLE_PRIO, svc_threads_idle,
                             0, &_svc_threads_idle, "svc_threads_idle") ;
 #else
     res = EOK ;
