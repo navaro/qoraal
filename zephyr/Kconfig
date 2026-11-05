@@ -26,6 +26,18 @@ config QORAAL_SVC_EVENTS_SYSWORKQ
       Event callbacks share the system workqueue's priority and stack, and
       must finish promptly. Use svc_tasks for lengthy or blocking work.
 
+config QORAAL_SVC_THREADS_IDLE_PRIO
+    int "Priority of the thread that frees finished svc_threads"
+    default 1
+    range 1 14
+    help
+      Qoraal priority level of svc_threads_idle, which frees the stacks of
+      terminated svc_threads: 1 is OS_THREAD_PRIO_LOWEST, n + 1 is
+      OS_THREAD_PRIO_n, 14 is OS_THREAD_PRIO_HIGHEST. At the lowest level it
+      only runs when nothing else is ready, so under steady load the stacks
+      of finished threads, such as web server workers, pile up in the heap.
+      Set it to the level of the service that creates those threads.
+
 config QORAAL_QFS
     bool "Enable Qoraal file system"
     default y
