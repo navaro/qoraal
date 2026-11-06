@@ -64,6 +64,19 @@ compare_by_handle(const void *a, const void *b) {
     return strcmp(namea, nameb);
 }
 
+/* The service argument "ctrl <service> start|restart <arg>" gives. */
+static void
+qshell_service_arg (SCV_SERVICE_HANDLE h, char** argv, int argc)
+{
+    uint32_t arg = 0 ;
+
+    if (argc > 3) {
+        svc_shell_scan_int(argv[3], &arg) ;
+        svc_service_set_arg(h, arg) ;
+
+    }
+}
+
 static int32_t
 qshell_cmd_ctrl (SVC_SHELL_IF_T * pif, char** argv, int argc)
 {
@@ -130,6 +143,20 @@ qshell_cmd_ctrl (SVC_SHELL_IF_T * pif, char** argv, int argc)
 
     if (stop || restart) {
         int32_t res = svc_service_stop_timeout (h, 5000) ;
+        if ((res == E_TIMEOUT) && restart) {
+            /* Still stopping, maybe waiting for this command itself, run
+             * by one of the service's own threads such as a web server
+             * worker: it starts again once it has stopped. */
+            qshell_service_arg (h, argv, argc) ;
+            res = svc_service_start (h, 0, 0) ;
+            if (res == EOK) {
+                svc_shell_print (pif, SVC_SHELL_OUT_STD,
+                    "'%s' is still stopping, it starts again once stopped\r\n", argv[1]) ;
+                return EOK ;
+
+            }
+
+        }
         if (res != EOK) {
             svc_shell_print (pif, SVC_SHELL_OUT_STD,
                 "ERROR: Stopping '%s' service failed with %d\r\n", argv[1], res) ;
@@ -140,12 +167,7 @@ qshell_cmd_ctrl (SVC_SHELL_IF_T * pif, char** argv, int argc)
     }
 
     if (start || restart) {
-        uint32_t arg = 0 ;
-        if (argc > 3) {
-            svc_shell_scan_int(argv[3], &arg) ;
-            svc_service_set_arg(h, arg) ;
-
-        }
+        qshell_service_arg (h, argv, argc) ;
         int32_t res = svc_service_start_timeout (h, 5000) ;
         if (res != EOK) {
             svc_shell_print (pif, SVC_SHELL_OUT_STD,
