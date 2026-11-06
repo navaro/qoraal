@@ -97,6 +97,10 @@ typedef struct SVC_SERVICE_S {
     uint32_t                    flags ;
     const char*                 name ;
 
+    /* Non-zero when a start was asked while the service stopped: it starts
+     * again once it has. Last, so the declarations below leave it zero. */
+    uint32_t                    restart ;
+
 } SVC_SERVICE_T ;
 
 

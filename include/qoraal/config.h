@@ -23,6 +23,17 @@
 #define CFG_SVC_THREADS_IDLE_PRIO       OS_THREAD_PRIO_LOWEST
 #endif
 
+/* CFG_SVC_SERVICES_START_STACK
+    Stack of the thread that starts a service again when a start was asked
+    while it stopped (a restart that could not wait for the stop). It runs
+    the service's START, which normally runs in the caller's thread, such as
+    the shell's: a web server that loads its TLS certificate needs about
+    4.6 KB of it.
+*/
+#if !(defined CFG_SVC_SERVICES_START_STACK)
+#define CFG_SVC_SERVICES_START_STACK    8192
+#endif
+
 
 /* CFG_SVC_WDT_DISABLE_PLATFORM
     If defined, platform does not support a watchdog, functions will be implemented as stubs only.

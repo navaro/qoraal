@@ -21,6 +21,7 @@
     SOFTWARE.
 */
 
+#include <string.h>
 #include <strings.h>
 #include "qoraal/config.h"
 #include "qoraal/qoraal.h"
@@ -34,6 +35,10 @@ static OS_MUTEX_DECL                (_svc_service_mutex) ;
 static SVC_SERVICE_T  *             _svc_service_list = 0 ;
 static uint32_t                     _cfg_service_cnt = 0 ;
 static stack_t                      _svc_service_handlers ;
+
+/* How often svc_service_start_timeout() and svc_service_stop_timeout() look
+ * at the status, in milliseconds. */
+#define SVC_SERVICE_WAIT_POLL_MS            50
 
 #define GET_SVC_SERVICE_HANDLE(pservice) \
             (SCV_SERVICE_HANDLE)( ((uintptr_t)pservice - (uintptr_t)_svc_service_list) / sizeof(SVC_SERVICE_T))
@@ -197,19 +202,93 @@ _service_status (SVC_SERVICE_T* pservice)
     return pservice->status ;
 }
 
+/* A thread that starts a service again once it has stopped, see
+ * svc_service_start(). */
+typedef struct SVC_SERVICE_STARTER_S {
+    SVC_THREADS_T               thd ;
+    SVC_SERVICE_T *             pservice ;
+} SVC_SERVICE_STARTER_T ;
+
+/* Its own thread runs the service's START, which normally runs in the
+ * caller's thread: neither the threads cleanup thread that completes the
+ * stop nor the service's own thread has the stack for it. */
+static void
+_service_starter (void * arg)
+{
+    SVC_SERVICE_STARTER_T * starter = (SVC_SERVICE_STARTER_T *) arg ;
+    SVC_SERVICE_T* pservice = starter->pservice ;
+    int32_t res = EOK ;
+
+    os_mutex_lock (&_svc_service_mutex) ;
+    if (pservice->restart && (pservice->status == SVC_SERVICE_STATUS_STOPPED)) {
+        pservice->restart = 0 ;
+        DBG_MESSAGE_SVC_SERVICES (DBG_MESSAGE_SEVERITY_LOG,
+                "SVC   : : starting '%s' again", pservice->name) ;
+        res = _service_start (pservice, 0, 0) ;
+
+    }
+    pservice->restart = 0 ;
+    os_mutex_unlock (&_svc_service_mutex) ;
+
+    (void) res ;     /* _service_start() logs a failure */
+}
+
+static void
+_service_starter_complete (SVC_THREADS_T * thread, void* arg)
+{
+    (void) thread ;
+    qoraal_free (QORAAL_HeapAuxiliary, arg) ;
+}
+
 static void
 _service_thread_complete(SVC_THREADS_T * service_thread, void* arg)
 {
     SVC_SERVICE_T* pservice = (SVC_SERVICE_T*) arg ;
+    SVC_SERVICE_STARTER_T * starter ;
+    int32_t res = E_NOMEM ;
+    uint32_t restart ;
 
     os_mutex_lock (&_svc_service_mutex) ;
     pservice->status = SVC_SERVICE_STATUS_STOPPED ;
     if (pservice->cb) pservice->cb (pservice->service, pservice->cb_parm) ;
     pservice->cb = 0 ;
     pservice->cb_parm = 0;
+    restart = pservice->restart ;
     os_mutex_unlock (&_svc_service_mutex) ;
 
     _service_changed (SVC_SERVICE_STATUS_STOPPED, (pservice)) ;
+
+    if (!restart) {
+        return ;
+
+    }
+
+    /* A start was asked while the service stopped. The restart flag stays
+     * set until the starter takes it, so svc_service_start_timeout() keeps
+     * waiting, and a stop meanwhile cancels it. */
+    starter = (SVC_SERVICE_STARTER_T *) qoraal_malloc (QORAAL_HeapAuxiliary,
+                    sizeof (SVC_SERVICE_STARTER_T)) ;
+    if (starter) {
+        memset (starter, 0, sizeof (SVC_SERVICE_STARTER_T)) ;
+        starter->pservice = pservice ;
+        res = svc_threads_create (&starter->thd, _service_starter_complete,
+                CFG_SVC_SERVICES_START_STACK, pservice->prio, _service_starter,
+                (void *)starter, "svc_start") ;
+        if (res != EOK) {
+            qoraal_free (QORAAL_HeapAuxiliary, starter) ;
+
+        }
+
+    }
+
+    if (res != EOK) {
+        os_mutex_lock (&_svc_service_mutex) ;
+        pservice->restart = 0 ;
+        os_mutex_unlock (&_svc_service_mutex) ;
+        DBG_MESSAGE_SVC_SERVICES (DBG_MESSAGE_SEVERITY_WARNING,
+                "SVC   :W: failed with %d starting '%s' again", res, pservice->name) ;
+
+    }
 }
 
 
@@ -510,6 +589,13 @@ _service_start (SVC_SERVICE_T* pservice, SVC_SERVICE_COMPLETE_CB cb, uintptr_t c
  * @note    Starts a specific service. If the service implements the "run" function, the state will change to
  *          "starting". If the run function is
  *
+ *          A service with a run function that is still stopping starts again
+ *          once it has stopped, in a thread of its own. That is the only way
+ *          a restart can finish when the stop waits for the caller itself,
+ *          such as a web server worker that runs "ctrl www restart". No
+ *          callback can be given then: the stop in progress has the one
+ *          there is (E_BUSY).
+ *
  * @param[in] handle
  * @param[in] cb
  * @param[in] cb_parm
@@ -533,13 +619,26 @@ svc_service_start (SCV_SERVICE_HANDLE handle, SVC_SERVICE_COMPLETE_CB cb, uintpt
     pservice = &_svc_service_list[handle] ;
     status = _service_status (pservice) ;
 
-    if (
+    if ((status == SVC_SERVICE_STATUS_STOPPING) && pservice->run) {
+        if (cb) {
+            res = E_BUSY ;
+
+        } else {
+            DBG_MESSAGE_SVC_SERVICES (DBG_MESSAGE_SEVERITY_LOG,
+                    "SVC   : : '%s' starts again once stopped", pservice->name) ;
+            pservice->restart = 1 ;
+            res = EOK ;
+
+        }
+
+    } else if (
             (status != SVC_SERVICE_STATUS_RESIDENT) &&
             (status != SVC_SERVICE_STATUS_STARTING) &&
             (status != SVC_SERVICE_STATUS_STOPPING) &&
             (status != SVC_SERVICE_STATUS_DISABLED)
         ) {
 
+        pservice->restart = 0 ;     /* started here, not by the starter */
         res = _service_start (pservice, cb, cb_parm) ;
 
     }
@@ -576,17 +675,10 @@ svc_service_stop (SCV_SERVICE_HANDLE handle, SVC_SERVICE_COMPLETE_CB cb, uintptr
     os_mutex_lock (&_svc_service_mutex) ;
 
     do {
-        pservice->cb = 0 ;
-
         if (!pservice->ctrl) {
             res = E_NOIMPL ;
             break ;
 
-        }
-
-        if (pservice->status == SVC_SERVICE_STATUS_STOPPING) {
-            DBG_MESSAGE_SVC_SERVICES (DBG_MESSAGE_SEVERITY_REPORT,
-                    "SVC   : : '%s' stopping in progress", pservice->name) ;
         }
 
         status = _service_status(pservice) ;
@@ -594,21 +686,33 @@ svc_service_stop (SCV_SERVICE_HANDLE handle, SVC_SERVICE_COMPLETE_CB cb, uintptr
         if (status == SVC_SERVICE_STATUS_STOPPED) {
             DBG_MESSAGE_SVC_SERVICES (DBG_MESSAGE_SEVERITY_LOG,
                     "SVC   : : '%s' already stopped", pservice->name) ;
+            pservice->restart = 0 ;     /* a start still to come is cancelled */
             res = EOK ;
             if (cb) cb (handle, cb_parm) ;
             break ;
 
         }
 
-        if (status < SVC_SERVICE_STATUS_STARTING) {
-            pservice->cb = cb ;
-            pservice->cb_parm = cb_parm ;
-            res = pservice->ctrl (SVC_SERVICE_CTRL_STOP, pservice->parm) ;
-            res = E_UNEXP ;
-            _service_changed (SVC_SERVICE_STATUS_STOPPED, (pservice)) ;
+        if (status == SVC_SERVICE_STATUS_STOPPING) {
+            /* Ask again, and cancel a start asked for meanwhile. The stop
+             * in progress keeps its callback: it may be waiting for it,
+             * and there is only one (E_BUSY for this one). */
+            DBG_MESSAGE_SVC_SERVICES (DBG_MESSAGE_SEVERITY_REPORT,
+                    "SVC   : : '%s' stopping in progress", pservice->name) ;
+            pservice->restart = 0 ;
+            (void) pservice->ctrl (SVC_SERVICE_CTRL_STOP, pservice->parm) ;
+            res = cb ? E_BUSY : EOK ;
             break ;
 
         }
+
+        if (status < SVC_SERVICE_STATUS_STOPPED) {
+            res = E_UNEXP ;     /* disabled */
+            break ;
+
+        }
+
+        pservice->cb = 0 ;
 
         DBG_MESSAGE_SVC_SERVICES (DBG_MESSAGE_SEVERITY_INFO,
                 "SVC   : : stopping '%s'...", pservice->name) ;
@@ -644,32 +748,62 @@ svc_service_stop (SCV_SERVICE_HANDLE handle, SVC_SERVICE_COMPLETE_CB cb, uintptr
     return res ;
 }
 
+/* Wait until the service has the status want, polling. A wait that gives up
+ * leaves nothing behind: a callback with a semaphore on the caller's stack
+ * would be called after the caller returned, and corrupt what is there
+ * then. A wait for STARTED fails at once when the service stopped again
+ * without a start to come. */
 static int32_t
-restart_cb(SVC_SERVICES_T id, uintptr_t cb_parm)
+_service_wait (SVC_SERVICE_T* pservice, int32_t want, uint32_t timeout)
 {
-    os_mutex_lock (&_svc_service_mutex) ;
-    p_sem_t  sem = (p_sem_t *) cb_parm ;
-    os_sem_signal (sem) ;
-    os_mutex_unlock (&_svc_service_mutex) ;
-    return EOK ;
+    uint32_t started = os_sys_timestamp () ;
+
+    for (;;) {
+        int32_t status ;
+        uint32_t restart ;
+
+        os_mutex_lock (&_svc_service_mutex) ;
+        status = _service_status (pservice) ;
+        restart = pservice->restart ;
+        os_mutex_unlock (&_svc_service_mutex) ;
+
+        if ((status == want) || ((want == SVC_SERVICE_STATUS_STARTED) &&
+                (status == SVC_SERVICE_STATUS_RESIDENT))) {
+            return EOK ;
+
+        }
+        if ((want == SVC_SERVICE_STATUS_STARTED) &&
+                (status == SVC_SERVICE_STATUS_STOPPED) && !restart) {
+            return EFAIL ;
+
+        }
+        if ((os_sys_timestamp () - started) >= timeout) {
+            return E_TIMEOUT ;
+
+        }
+        os_thread_sleep (SVC_SERVICE_WAIT_POLL_MS) ;
+
+    }
 }
 
 /**
  * @brief   svc_service_start_timeout
- * @note    Start a specific service.
+ * @note    Start a specific service and wait until it has started. A
+ *          service that is still stopping starts again once stopped, see
+ *          svc_service_start().
  *
  * @param[in] handle
- * @param[in] timeout
+ * @param[in] timeout   milliseconds
  *
- * @return           error
+ * @return           error: E_TIMEOUT when it has not started in time.
  *
  * @svc
  */
 int32_t
 svc_service_start_timeout (SCV_SERVICE_HANDLE handle, uint32_t timeout)
 {
-    int32_t res =  E_UNEXP;
-    OS_SEMAPHORE_DECL (sem) ;
+    int32_t res ;
+    int32_t status ;
     SVC_SERVICE_T* pservice ;
 
     if (!_svc_service_list)  return E_UNEXP ;
@@ -677,48 +811,49 @@ svc_service_start_timeout (SCV_SERVICE_HANDLE handle, uint32_t timeout)
 
     pservice = &_svc_service_list[handle] ;
 
-    os_sem_init (&sem, 0) ;
-
-    if (_service_status (pservice) == SVC_SERVICE_STATUS_STOPPED) {
-        if ((res = svc_service_start (handle, restart_cb,  (uintptr_t)&sem)) == EOK) {
-            res = os_sem_wait_timeout (&sem, OS_MS2TICKS(timeout)) ;
-            os_mutex_lock (&_svc_service_mutex) ;
-            pservice->cb = 0 ;
-            pservice->cb_parm = 0 ;
-            os_mutex_unlock (&_svc_service_mutex) ;
+    res = svc_service_start (handle, 0, 0) ;
+    if (res == E_UNEXP) {
+        os_mutex_lock (&_svc_service_mutex) ;
+        status = _service_status (pservice) ;
+        os_mutex_unlock (&_svc_service_mutex) ;
+        if ((status == SVC_SERVICE_STATUS_STARTING) ||
+                (status == SVC_SERVICE_STATUS_RESIDENT)) {
+            res = EOK ;
 
         }
 
     }
+    if (res == EOK) {
+        res = _service_wait (pservice, SVC_SERVICE_STATUS_STARTED, timeout) ;
 
-    os_sem_deinit (&sem) ;
+    }
 
     if (res != EOK) {
         DBG_MESSAGE_SVC_SERVICES (DBG_MESSAGE_SEVERITY_ERROR,
-                "SVC   :E: restarting '%s' failed with %d.",
+                "SVC   :E: starting '%s' failed with %d.",
                 pservice->name, res);
 
     }
 
-    return EOK ;
+    return res ;
 }
 
 /**
- * @brief   svc_service_start_timeout
- * @note    Start a specific service.
+ * @brief   svc_service_stop_timeout
+ * @note    Stop a specific service and wait until it has stopped. A stop
+ *          that times out goes on: the service stops when it can.
  *
  * @param[in] handle
- * @param[in] timeout
+ * @param[in] timeout   milliseconds
  *
- * @return           error
+ * @return           error: E_TIMEOUT when it has not stopped in time.
  *
  * @svc
  */
 int32_t
 svc_service_stop_timeout (SCV_SERVICE_HANDLE handle, uint32_t timeout)
 {
-    int32_t res =  E_UNEXP;
-    OS_SEMAPHORE_DECL (sem) ;
+    int32_t res ;
     SVC_SERVICE_T* pservice ;
 
     if (!_svc_service_list) return E_UNEXP ;
@@ -726,23 +861,11 @@ svc_service_stop_timeout (SCV_SERVICE_HANDLE handle, uint32_t timeout)
 
     pservice = &_svc_service_list[handle] ;
 
-    os_sem_init (&sem, 0) ;
-
-    if (_service_status (pservice) != SVC_SERVICE_STATUS_STOPPED) {
-        if ((res = svc_service_stop (handle, restart_cb,  (uintptr_t)&sem)) == EOK) {
-            res = os_sem_wait_timeout (&sem, OS_MS2TICKS(timeout)) ;
-            os_mutex_lock (&_svc_service_mutex) ;
-            pservice->cb = 0 ;
-            pservice->cb_parm = 0 ;
-            os_mutex_unlock (&_svc_service_mutex) ;
-
-
-        }
+    res = svc_service_stop (handle, 0, 0) ;
+    if (res == EOK) {
+        res = _service_wait (pservice, SVC_SERVICE_STATUS_STOPPED, timeout) ;
 
     }
-
-    os_sem_deinit (&sem) ;
-
 
     if (res != EOK) {
         DBG_MESSAGE_SVC_SERVICES (DBG_MESSAGE_SEVERITY_ERROR,
@@ -751,8 +874,7 @@ svc_service_stop_timeout (SCV_SERVICE_HANDLE handle, uint32_t timeout)
 
     }
 
-
-    return EOK ;
+    return res ;
 }
 
 
