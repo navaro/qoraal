@@ -25,6 +25,19 @@ endif()
 
 
 # Generate a map file
-set_target_properties(qoraal_test PROPERTIES 
+set_target_properties(qoraal_test PROPERTIES
         LINK_FLAGS "-Wl,-Map=output.map -T ${CMAKE_SOURCE_DIR}/test/posix/posix.ld"
+)
+
+# Self-checking test for svc_tasks cancel; exits non-zero on failure
+add_executable(test_svc_tasks test_svc_tasks.c)
+target_compile_definitions(test_svc_tasks PRIVATE CFG_OS_POSIX)
+target_compile_options(test_svc_tasks PRIVATE -O0 -g -Wall)
+if(WIN32)
+    target_link_libraries(test_svc_tasks qoraal pthread ws2_32)
+else()
+    target_link_libraries(test_svc_tasks qoraal pthread)
+endif()
+set_target_properties(test_svc_tasks PROPERTIES
+        LINK_FLAGS "-T ${CMAKE_SOURCE_DIR}/test/posix/posix.ld"
 )
