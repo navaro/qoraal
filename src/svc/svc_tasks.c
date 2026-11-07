@@ -556,7 +556,7 @@ task_ready_cancel (SVC_TASKS_T* task)
         linked_t   * list = &_svc_tasks_ready_list[prio] ;
 
         if((linked_remove (list, task, OFFSETOF(SVC_TASKS_T, next)) != NULL_LLO)) {
-            uint32_t parm = task->parm ;
+            uintptr_t parm = task->parm ;
             res = EOK ;
             DBG_ASSERT_SVC_TASKS (_svc_tasks_ready_count, ("task_ready_cancel _svc_tasks_ready_count invalid")) ;
             _svc_tasks_ready_count-- ;
@@ -608,7 +608,7 @@ svc_tasks_cancel (SVC_TASKS_T* task)
     start = (SVC_TASKS_T*)linked_head (&_svc_tasks_list) ;
 
     if (linked_remove (&_svc_tasks_list, task, OFFSETOF(SVC_TASKS_T, next)) != NULL_LLO) {
-        uint32_t parm = task->parm ;
+        uintptr_t parm = task->parm ;
 
         DBG_ASSERT_SVC_TASKS (_svc_tasks_list_count, 
                     "svc_tasks_cancel _svc_tasks_list_count invalid") ;
