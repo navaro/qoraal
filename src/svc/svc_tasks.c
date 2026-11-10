@@ -445,7 +445,7 @@ svc_tasks_add (SVC_TASKS_T* task, SVC_TASKS_CALLBACK_T callback, uintptr_t parm,
     } else {
         task->callback = callback ;
         task->parm = parm ;
-        task->status = SERVICE_STATUS_QUEUED ;
+        task->status = (task->status & SERVICE_STATUS_ACTIVE_BIT) | SERVICE_STATUS_QUEUED ;
         task->prio = prio ;
         task->ticks = 0 ;
         task_to_ready (task) ;
@@ -491,7 +491,9 @@ svc_tasks_schedule (SVC_TASKS_T* task, SVC_TASKS_CALLBACK_T callback, uintptr_t 
 
     task->callback = callback ;
     task->parm = parm ;
-    task->status = SERVICE_STATUS_QUEUED ;
+    /* Keep the active bit: a callback that re-arms its own task is still
+     * running until it calls svc_tasks_complete(). */
+    task->status = (task->status & SERVICE_STATUS_ACTIVE_BIT) | SERVICE_STATUS_QUEUED ;
     task->prio = prio ;
     task->ticks = ticks + os_sys_ticks () ;
 
@@ -556,7 +558,7 @@ task_ready_cancel (SVC_TASKS_T* task)
         linked_t   * list = &_svc_tasks_ready_list[prio] ;
 
         if((linked_remove (list, task, OFFSETOF(SVC_TASKS_T, next)) != NULL_LLO)) {
-            uint32_t parm = task->parm ;
+            uintptr_t parm = task->parm ;
             res = EOK ;
             DBG_ASSERT_SVC_TASKS (_svc_tasks_ready_count, ("task_ready_cancel _svc_tasks_ready_count invalid")) ;
             _svc_tasks_ready_count-- ;
@@ -566,7 +568,12 @@ task_ready_cancel (SVC_TASKS_T* task)
             }
 #endif
 
-            task->status = SERVICE_STATUS_COMPLETE ;
+            task->status &= SERVICE_STATUS_ACTIVE_BIT ;
+            if (task->status & SERVICE_STATUS_ACTIVE_BIT) {
+                /* Its callback is still running and owns the task. */
+                return E_BUSY ;
+
+            }
             os_mutex_unlock (&_svc_task_mutex) ;
 
             task->callback (task, parm, SERVICE_CALLBACK_REASON_CANCELED) ;
@@ -608,7 +615,7 @@ svc_tasks_cancel (SVC_TASKS_T* task)
     start = (SVC_TASKS_T*)linked_head (&_svc_tasks_list) ;
 
     if (linked_remove (&_svc_tasks_list, task, OFFSETOF(SVC_TASKS_T, next)) != NULL_LLO) {
-        uint32_t parm = task->parm ;
+        uintptr_t parm = task->parm ;
 
         DBG_ASSERT_SVC_TASKS (_svc_tasks_list_count, 
                     "svc_tasks_cancel _svc_tasks_list_count invalid") ;
@@ -627,7 +634,13 @@ svc_tasks_cancel (SVC_TASKS_T* task)
 
         }
 
-        task->status = SERVICE_STATUS_COMPLETE ;
+        task->status &= SERVICE_STATUS_ACTIVE_BIT ;
+        if (task->status & SERVICE_STATUS_ACTIVE_BIT) {
+            /* Its callback is still running and owns the task. */
+            os_mutex_unlock (&_svc_task_mutex) ;
+            return E_BUSY ;
+
+        }
         os_mutex_unlock (&_svc_task_mutex) ;
         task->callback (task, parm, SERVICE_CALLBACK_REASON_CANCELED) ;
 
@@ -665,14 +678,19 @@ svc_tasks_cancel (SVC_TASKS_T* task)
 int32_t
 svc_tasks_cancel_wait (SVC_TASKS_T* task, uint32_t timeout)
 {
-    int res = svc_tasks_cancel(task) ;
-    if ((res == E_BUSY) && timeout) {
-        res = svc_tasks_wait (task, timeout) ;
-        svc_tasks_cancel(task) ;
+    int32_t res = svc_tasks_cancel(task) ;
+    uint32_t left = timeout ;
+
+    /* Cancel again until the callback is done: it may re-arm its task. */
+    while ((res == E_BUSY) && left) {
+        uint32_t wait = left > SVC_TASK_MS2TICKS(10) ? SVC_TASK_MS2TICKS(10) : left ;
+        os_thread_sleep (SVC_TASK_TICKS2MS(wait)) ;
+        left -= wait ;
+        res = svc_tasks_cancel(task) ;
 
     }
 
-    return res  ;
+    return ((res == E_BUSY) && timeout) ? E_TIMEOUT : res ;
 }
 
 uint32_t

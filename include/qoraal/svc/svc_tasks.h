@@ -21,8 +21,37 @@
     SOFTWARE.
  */
 
-
-
+/**
+ * @file    svc_tasks.h
+ * @brief   Deferred and timed callbacks on a pool of worker threads.
+ * @details
+ *
+ * How to use
+ *
+ * Each pool entry is one worker thread with its own queue. The prio passed
+ * to svc_tasks_schedule() selects the queue. Tasks on one queue never run
+ * at the same time.
+ *
+ * svc_tasks_schedule() queues a task, or returns E_BUSY if it is already
+ * queued. The callback runs on that queue with reason RUN once the ticks
+ * have passed.
+ *
+ * A task is active from the start of its RUN callback until the callback
+ * calls svc_tasks_complete(). Every callback must call it, for RUN and for
+ * CANCELED. Re-arming the task keeps it active.
+ *
+ * svc_tasks_cancel() removes a queued instance and returns EOK after its
+ * CANCELED callback. It returns E_BUSY while the task is active: the
+ * running callback still owns the task, so a re-arm removed then gets no
+ * CANCELED. svc_tasks_cancel_wait() cancels until the task is idle, or
+ * returns E_TIMEOUT.
+ *
+ * Re-arm a running task on the queue it runs on: on another queue a second
+ * thread could start it while this callback still runs. Code that a task's
+ * own callback can reach, such as a stop path, must cancel with
+ * svc_tasks_cancel(): svc_tasks_cancel_wait() would wait for the callback
+ * it is called from.
+ */
 
 #ifndef __SVC_TASKS_H__
 #define __SVC_TASKS_H__
@@ -147,6 +176,7 @@ extern "C" {
     void            svc_tasks_init_task (SVC_TASKS_T* task) ;
     int32_t         svc_tasks_init_waitable_task (SVC_WAITABLE_TASKS_T* task) ;
     void            svc_tasks_deinit_waitable_task (SVC_WAITABLE_TASKS_T* task) ;
+
     int32_t         svc_tasks_schedule (SVC_TASKS_T* timer, SVC_TASKS_CALLBACK_T complete, uintptr_t parm, uint16_t prio, uint32_t ticks) ;
     int32_t         svc_tasks_cancel (SVC_TASKS_T* task) ;
     int32_t         svc_tasks_cancel_wait (SVC_TASKS_T* task, uint32_t timeout) ;
