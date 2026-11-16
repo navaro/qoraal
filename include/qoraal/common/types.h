@@ -38,6 +38,8 @@ typedef enum {
     QORAAL_PROP_BOOLEAN,
     QORAAL_PROP_ACTION,
     QORAAL_PROP_ENUM,
+    QORAAL_PROP_EVENT,  /* A GET is a stream of events, written by the response callback. */
+    QORAAL_PROP_LIST,   /* A GET is a JSON array, written by the response callback. */
 } QORAAL_PROP_TYPE_T;
 
 /* Resolver callback: given an enum type name, returns the type descriptor. */
@@ -47,6 +49,13 @@ typedef struct QORAAL_PROP_S QORAAL_PROP_T;
 
 typedef int32_t (*qoraal_prop_callback_t)(void *val, QORAAL_PROP_T *prop);
 
+/* Writes the whole response to a GET of the property, for an answer that is
+ * not one value. ctx belongs to the transport and query is the text after
+ * '?', or NULL. Returns an E_* code (QORAAL_ERROR and below; EFAIL is not
+ * one) only while nothing has been written, so the transport can still
+ * answer with a status. */
+typedef int32_t (*qoraal_prop_response_t)(QORAAL_PROP_T *prop, void *ctx, char *query);
+
 struct QORAAL_PROP_S {
     const char * name;              /* Property name, e.g. "state". */
     QORAAL_PROP_TYPE_T type;        /* Property value type. */
@@ -54,11 +63,12 @@ struct QORAAL_PROP_S {
     const char * enum_name;         /* Enum type name resolved at runtime. */
     qoraal_prop_callback_t get_callback;
     qoraal_prop_callback_t set_callback;
+    qoraal_prop_response_t response_callback;  /* Set for QORAAL_PROP_EVENT and QORAAL_PROP_LIST. */
     uintptr_t arg;
 };
 
 /* Resource capability flags for QORAAL_PROP_RESOURCE_T.flags */
-#define QORAAL_PROP_RESOURCE_FLAG_EVENTS    (1U << 0)  /* resource publishes streaming events */
+#define QORAAL_PROP_RESOURCE_FLAG_EVENTS    (1U << 0)  /* resource's module publishes events; its ep names it in event filters */
 
 typedef struct QORAAL_PROP_RESOURCE_S {
     struct QORAAL_PROP_RESOURCE_S *next; /* Intrusive registration list. */
@@ -72,6 +82,9 @@ typedef struct QORAAL_PROP_RESOURCE_S {
     const char * get_summary;
     const char * set_summary;
 
+    /* In a resource with a QORAAL_PROP_EVENT or QORAAL_PROP_LIST prop, a prop
+     * with no callback is a query parameter of those props: the API documents
+     * describe it, and the response callback parses the query itself. */
     QORAAL_PROP_T *props;
     size_t props_count;
 
@@ -92,6 +105,7 @@ typedef struct QORAAL_PROP_RESOURCE_S {
         0,                                                             \
         get_,                                                          \
         set_,                                                          \
+        0,                                                             \
         arg_                                                           \
     }
 
@@ -103,8 +117,27 @@ typedef struct QORAAL_PROP_RESOURCE_S {
         enum_name_,                                                    \
         get_,                                                          \
         set_,                                                          \
+        0,                                                             \
         arg_                                                           \
     }
+
+/* A QORAAL_PROP_EVENT or QORAAL_PROP_LIST property: no getter or setter. */
+#define QORAAL_PROP_RESPONSE_INIT(prop_, type_, description_, response_, arg_) \
+    {                                                                  \
+        prop_,                                                         \
+        type_,                                                         \
+        description_,                                                  \
+        0,                                                             \
+        0,                                                             \
+        0,                                                             \
+        response_,                                                     \
+        arg_                                                           \
+    }
+
+/* A query parameter of the resource's QORAAL_PROP_EVENT and QORAAL_PROP_LIST
+ * properties: a property with no callback. */
+#define QORAAL_PROP_PARAM_INIT(prop_, type_, description_)              \
+    QORAAL_PROP_INIT(prop_, type_, description_, 0, 0, 0)
 
 #define QORAAL_PROP_DECL(name, prop_, type_, description_, get_, set_, arg_) \
     QORAAL_PROP_T name = QORAAL_PROP_INIT(prop_, type_, description_, get_, set_, arg_)
@@ -144,7 +177,7 @@ typedef struct QORAAL_PROP_RESOURCE_S {
         module_                                                        \
     }
 
-/* Convenience macro for resources that publish streaming events.
+/* Convenience macro for a module's resource: sets QORAAL_PROP_RESOURCE_FLAG_EVENTS.
  * CMM assigns the owning service/module id during resource registration. */
 #define QORAAL_PROP_RESOURCE_INIT_EVENTS(title_, version_, ep_, tag_, desc_, get_sum_, set_sum_, props_) \
     QORAAL_PROP_RESOURCE_INIT_EX(title_, version_, ep_, tag_, desc_, get_sum_, set_sum_, props_, \
