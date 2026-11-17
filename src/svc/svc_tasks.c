@@ -417,9 +417,12 @@ svc_tasks_service_task ( linked_t* task_list, int thd_count, SVC_WDT_HANDLE_T * 
         os_sys_unlock();
 
 #if defined CFG_SVC_TASKS_STATS_ENABLE
+        /* Under the mutex, so a reset cannot interleave with an update. */
+        os_mutex_lock (&_svc_task_mutex) ;
         if (wait > stats->max_wait) stats->max_wait = wait ;
         if (timer > stats->max_run) stats->max_run = timer ;
         if (timer > SVC_TASK_OVERRUN(hwdt)) stats->overruns++ ;
+        os_mutex_unlock (&_svc_task_mutex) ;
 #endif
 
         os_event_signal (&_svc_tasks_complete_event, 1 << thd_count) ;
