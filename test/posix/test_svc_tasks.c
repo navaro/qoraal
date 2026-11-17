@@ -7,8 +7,8 @@
 
 /*
  * Host test for svc_tasks cancel, including tasks that re-arm themselves
- * from their own callback, the pattern periodic tasks use. It runs on the
- * POSIX port and exits non-zero when a check fails.
+ * from their own callback, the pattern periodic tasks use, and for the queue
+ * statistics. It runs on the POSIX port and exits non-zero when a check fails.
  */
 
 #include <stdio.h>
@@ -231,6 +231,69 @@ test_cancel_wait_timeout (void)
     CHECK (!t.in_run && !t.canceled, "timeout: in RUN %d, CANCELED %d", t.in_run, t.canceled) ;
 }
 
+#if defined CFG_SVC_TASKS_STATS_ENABLE
+static void
+run_once (TEST_TASK_T * t, uint32_t work_ms, uint16_t queue, uint32_t ticks)
+{
+    test_task_init (t, 0, 0, work_ms) ;
+    t->rearms = 0 ;
+    svc_tasks_schedule (&t->task, test_task_cb, 0, queue, ticks) ;
+}
+
+static void
+wait_done (TEST_TASK_T * t)
+{
+    for (int i = 0 ; i < 1000 && (!t->runs || svc_tasks_is_active (&t->task)) ; i++) os_thread_sleep (5) ;
+    /* The queue updates its statistics just after the callback returns. */
+    os_thread_sleep (50) ;
+}
+
+/*
+ * Three 100 ms tasks added at once to queue 1: the third waits for the two
+ * before it. At the same time a 2.6 s task on queue 0 overruns a quarter of
+ * that queue's 10 s watchdog timeout. After a reset, a task with a timeout
+ * waits from when it was due, not from when it was scheduled.
+ */
+static void
+test_stats (void)
+{
+    static TEST_TASK_T t[3], slow ;
+    SVC_TASKS_STATS_T s ;
+
+    svc_tasks_stats_reset () ;
+    run_once (&slow, 2600, SERVICE_PRIO_QUEUE0, 0) ;
+    for (int i = 0 ; i < 3 ; i++) run_once (&t[i], 100, SERVICE_PRIO_QUEUE1, 0) ;
+    wait_done (&t[2]) ;
+
+    svc_tasks_stats (SERVICE_PRIO_QUEUE1, &s) ;
+    CHECK (s.queued == 3, "stats: queued %u", s.queued) ;
+    CHECK (s.depth == 0, "stats: depth %u", s.depth) ;
+    CHECK (s.max_depth >= 2 && s.max_depth <= 3, "stats: max depth %u", s.max_depth) ;
+    CHECK (s.overruns == 0, "stats: queue 1 overruns %u", s.overruns) ;
+    CHECK (OS_TICKS2MS(s.max_run) >= 90, "stats: max run %u ms", OS_TICKS2MS(s.max_run)) ;
+    CHECK (OS_TICKS2MS(s.max_wait) >= 150, "stats: max wait %u ms", OS_TICKS2MS(s.max_wait)) ;
+
+    wait_done (&slow) ;
+    svc_tasks_stats (SERVICE_PRIO_QUEUE0, &s) ;
+    CHECK (s.overruns == 1, "stats: queue 0 overruns %u", s.overruns) ;
+    CHECK (OS_TICKS2MS(s.max_run) >= 2500, "stats: queue 0 max run %u ms", OS_TICKS2MS(s.max_run)) ;
+
+    svc_tasks_stats_reset () ;
+    svc_tasks_stats (SERVICE_PRIO_QUEUE1, &s) ;
+    CHECK (!s.queued && !s.max_depth && !s.max_run && !s.max_wait,
+            "stats: reset left queued %u, max depth %u, max run %u, max wait %u",
+            s.queued, s.max_depth, s.max_run, s.max_wait) ;
+
+    run_once (&t[0], 0, SERVICE_PRIO_QUEUE1, SVC_TASK_MS2TICKS(200)) ;
+    wait_done (&t[0]) ;
+    svc_tasks_stats (SERVICE_PRIO_QUEUE1, &s) ;
+    CHECK (s.queued == 1, "stats: timed queued %u", s.queued) ;
+    CHECK (OS_TICKS2MS(s.max_wait) < 100, "stats: timed max wait %u ms", OS_TICKS2MS(s.max_wait)) ;
+
+    CHECK (svc_tasks_stats (SERVICE_PRIO_QUEUE_MAX, &s) == E_PARM, "stats: queue out of range") ;
+}
+#endif
+
 int
 main (void)
 {
@@ -255,6 +318,9 @@ main (void)
     test_cancel_rearmed_busy () ;
     test_cancel_self () ;
     test_cancel_wait_timeout () ;
+#if defined CFG_SVC_TASKS_STATS_ENABLE
+    test_stats () ;
+#endif
 
     printf ("%d checks, %d failed\n", _checks, _failures) ;
     fflush (stdout) ;

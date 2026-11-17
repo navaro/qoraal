@@ -99,6 +99,13 @@
                                     ,{OS_THREAD_PRIO_2, 1024*4, "svc-task2", TIMEOUT_10_SEC}
 #endif
 
+/* CFG_SVC_TASKS_STATS_ENABLE
+    If defined, svc_tasks keeps statistics for each queue: tasks queued, the
+    most waiting at once, callbacks that ran too long, and the longest run and
+    wait. The shell command "tasks" shows them, "tasks reset" clears them.
+*/
+// #define CFG_SVC_TASKS_STATS_ENABLE       1
+
 #if !(defined CFG_SVC_EVENTS_THREAD_PRIO)
 #define CFG_SVC_EVENTS_THREAD_PRIO       OS_THREAD_PRIO_11
 #endif

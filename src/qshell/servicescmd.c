@@ -31,6 +31,7 @@
 #include "qoraal/qoraal.h"
 #include "qoraal/svc/svc_services.h"
 #include "qoraal/svc/svc_shell.h"
+#include "qoraal/svc/svc_tasks.h"
 #include "qoraal/common/mlog.h"
 #include "qoraal/common/logit.h"
 
@@ -40,6 +41,9 @@ SVC_SHELL_CMD_DECL( "sleep", qshell_cmd_sleep, "<msec>");
 SVC_SHELL_CMD_DECL( "cls", qshell_cmd_cls,  "");
 #if !defined CFG_COMMON_MEMLOG_DISABLE
 SVC_SHELL_CMD_DECL( "dmesg", qshell_cmd_dmesg,  "[severity] [count]");
+#endif
+#if defined CFG_SVC_TASKS_STATS_ENABLE
+SVC_SHELL_CMD_DECL( "tasks", qshell_cmd_tasks,  "[reset]");
 #endif
 
 /**
@@ -264,6 +268,41 @@ qshell_cmd_dmesg (SVC_SHELL_IF_T * pif, char** argv, int argc)
     }
 
     qoraal_free (QORAAL_HeapAuxiliary, msg) ;
+
+    return SVC_SHELL_CMD_E_OK ;
+}
+#endif
+
+#if defined CFG_SVC_TASKS_STATS_ENABLE
+/* Prints the svc_tasks statistics, one row per queue. "reset" clears them
+ * after printing. */
+static int32_t
+qshell_cmd_tasks (SVC_SHELL_IF_T * pif, char** argv, int argc)
+{
+    SVC_TASKS_STATS_T s ;
+    uint32_t q ;
+
+    if ((argc > 1) && strcasecmp ("reset", argv[1])) {
+        return SVC_SHELL_CMD_E_PARMS ;
+
+    }
+
+    svc_shell_print (pif, SVC_SHELL_OUT_STD,
+            "queue  queued  depth  max  overruns  max run ms  max wait ms" SVC_SHELL_NEWLINE) ;
+    for (q = 0; svc_tasks_stats (q, &s) == EOK; q++) {
+        svc_shell_print (pif, SVC_SHELL_OUT_STD,
+                "%5u  %6u  %5u  %3u  %8u  %10u  %11u" SVC_SHELL_NEWLINE,
+                q, s.queued, s.depth, s.max_depth, s.overruns,
+                OS_TICKS2MS(s.max_run), OS_TICKS2MS(s.max_wait)) ;
+
+    }
+    svc_shell_print (pif, SVC_SHELL_OUT_STD,
+            "scheduled %u" SVC_SHELL_NEWLINE, svc_tasks_scheduled_count ()) ;
+
+    if (argc > 1) {
+        svc_tasks_stats_reset () ;
+
+    }
 
     return SVC_SHELL_CMD_E_OK ;
 }

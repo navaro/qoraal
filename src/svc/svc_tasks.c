@@ -42,6 +42,8 @@
 #include "qoraal/common/lists.h"
 
 #define SVC_PRIO2QUEUE(prio)            (prio < _svc_tasks_pool_count ? prio : (_svc_tasks_pool_count - 1))
+/* A callback that runs longer than a quarter of its watchdog timeout overruns. */
+#define SVC_TASK_OVERRUN(hwdt)          OS_MS2TICKS(svc_wdt_timeout(hwdt)*250)
 
 static SVC_TASK_CFG_T                   _svc_tasks_pool = {{SVC_TASK_CFG_DEFAULT}} ;
 static uint32_t                         _svc_tasks_pool_count = SVC_TASK_CFG_MAX ;
@@ -57,6 +59,9 @@ static OS_TIMER_DECL                    (_svc_tasks_virtual_timer) ;
 static SVC_EVENTS_HANDLER_T             _svc_tasks_event_handler ;
 static p_thread_t                       _svc_task_threads[SERVICE_PRIO_QUEUE_MAX] = {0};
 static OS_EVENT_DECL                    (_svc_tasks_complete_event) ;
+#if defined CFG_SVC_TASKS_STATS_ENABLE
+static SVC_TASKS_STATS_T                _svc_tasks_stats[SERVICE_PRIO_QUEUE_MAX] ;
+#endif
 
 static void svc_tasks_task_event (SVC_EVENTS_T id, void * ctx) ;
 static uint32_t svc_tasks_service_task (linked_t* task_list, int thd_count, SVC_WDT_HANDLE_T * hwdt) ;
@@ -302,6 +307,11 @@ task_to_ready (SVC_TASKS_T* task)
 
     linked_add_tail (&_svc_tasks_ready_list[queue], task, OFFSETOF(SVC_TASKS_T, next)) ;
     _svc_tasks_ready_count++ ;
+#if defined CFG_SVC_TASKS_STATS_ENABLE
+    SVC_TASKS_STATS_T * stats = &_svc_tasks_stats[queue] ;
+    stats->queued++ ;
+    if (++stats->depth > stats->max_depth) stats->max_depth = stats->depth ;
+#endif
 
     os_event_clear (&_svc_tasks_complete_event, mask) ;
 
@@ -378,6 +388,12 @@ svc_tasks_service_task ( linked_t* task_list, int thd_count, SVC_WDT_HANDLE_T * 
 
         }
 #endif
+#if defined CFG_SVC_TASKS_STATS_ENABLE
+        SVC_TASKS_STATS_T * stats = &_svc_tasks_stats[thd_count] ;
+        /* ticks is when the task was due: its timeout, or when it was added. */
+        uint32_t wait = os_sys_ticks () - start->ticks ;
+        stats->depth-- ;
+#endif
         start->status = SERVICE_STATUS_ACTIVE_BIT ;
         os_mutex_unlock (&_svc_task_mutex) ;
 
@@ -392,6 +408,7 @@ svc_tasks_service_task ( linked_t* task_list, int thd_count, SVC_WDT_HANDLE_T * 
         /* Give each callback a fresh watchdog interval while draining the queue. */
         svc_wdt_handler_kick (hwdt) ;
         callback (start, parm, SERVICE_CALLBACK_REASON_RUN) ;
+        timer = os_sys_ticks() - timer ;
 
         os_sys_lock();
         _svc_task_active_task[thd_count] = 0 ;
@@ -399,11 +416,16 @@ svc_tasks_service_task ( linked_t* task_list, int thd_count, SVC_WDT_HANDLE_T * 
         svc_wdt_set_id (hwdt, 0) ;
         os_sys_unlock();
 
+#if defined CFG_SVC_TASKS_STATS_ENABLE
+        if (wait > stats->max_wait) stats->max_wait = wait ;
+        if (timer > stats->max_run) stats->max_run = timer ;
+        if (timer > SVC_TASK_OVERRUN(hwdt)) stats->overruns++ ;
+#endif
+
         os_event_signal (&_svc_tasks_complete_event, 1 << thd_count) ;
 
 #ifndef NDEBUG
-        timer = os_sys_ticks() - timer;
-        if (timer > OS_MS2TICKS(svc_wdt_timeout(hwdt)*250)) {
+        if (timer > SVC_TASK_OVERRUN(hwdt)) {
             DBG_MESSAGE_SVC_TASKS (DBG_MESSAGE_SEVERITY_REPORT,
                 "SVC   : : svc_tasks_service_task %d elapsed for 0x%x queue %d",
                 OS_TICKS2MS(timer), callback, thd_count);
@@ -447,7 +469,7 @@ svc_tasks_add (SVC_TASKS_T* task, SVC_TASKS_CALLBACK_T callback, uintptr_t parm,
         task->parm = parm ;
         task->status = (task->status & SERVICE_STATUS_ACTIVE_BIT) | SERVICE_STATUS_QUEUED ;
         task->prio = prio ;
-        task->ticks = 0 ;
+        task->ticks = os_sys_ticks () ;
         task_to_ready (task) ;
         status  = EOK  ;
 
@@ -566,6 +588,9 @@ task_ready_cancel (SVC_TASKS_T* task)
             if (!_svc_tasks_ready_count) {
                 DBG_ASSERT_SVC_TASKS (!linked_head(list), "task_ready_cancel 2_svc_tasks_ready_count invalid") ;
             }
+#endif
+#if defined CFG_SVC_TASKS_STATS_ENABLE
+            _svc_tasks_stats[prio].depth-- ;
 #endif
 
             task->status &= SERVICE_STATUS_ACTIVE_BIT ;
@@ -769,3 +794,29 @@ svc_tasks_wait (SVC_TASKS_T* task, uint32_t timeout)
     return ((svc_tasks_status(task) != SERVICE_STATUS_COMPLETE) || svc_tasks_is_active(task)) ? E_TIMEOUT : EOK  ;
 
 }
+
+#if defined CFG_SVC_TASKS_STATS_ENABLE
+int32_t
+svc_tasks_stats (uint32_t queue, SVC_TASKS_STATS_T * stats)
+{
+    if (queue >= _svc_tasks_pool_count) return E_PARM ;
+    os_mutex_lock (&_svc_task_mutex) ;
+    *stats = _svc_tasks_stats[queue] ;
+    os_mutex_unlock (&_svc_task_mutex) ;
+    return EOK ;
+}
+
+void
+svc_tasks_stats_reset (void)
+{
+    os_mutex_lock (&_svc_task_mutex) ;
+    for (uint32_t i = 0; i < SERVICE_PRIO_QUEUE_MAX; i++) {
+        /* depth counts tasks still in the queue, so it stays. */
+        uint32_t depth = _svc_tasks_stats[i].depth ;
+        memset (&_svc_tasks_stats[i], 0, sizeof (SVC_TASKS_STATS_T)) ;
+        _svc_tasks_stats[i].depth = depth ;
+        _svc_tasks_stats[i].max_depth = depth ;
+    }
+    os_mutex_unlock (&_svc_task_mutex) ;
+}
+#endif

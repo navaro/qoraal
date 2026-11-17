@@ -50,6 +50,7 @@ zephyr_compile_definitions(
 # Translate Zephyr config → Qoraal config
 zephyr_compile_definitions_ifndef(CONFIG_QORAAL_QFS CFG_QFS_DISABLE=1)
 zephyr_compile_definitions_ifdef(CONFIG_QORAAL_SVC_EVENTS_SYSWORKQ CFG_SVC_EVENTS_SYSWORKQ=1)
+zephyr_compile_definitions_ifdef(CONFIG_QORAAL_SVC_TASKS_STATS CFG_SVC_TASKS_STATS_ENABLE=1)
 zephyr_compile_definitions(CFG_CONSOLE_PROMPT=CONFIG_QORAAL_QSHELL_PROMPT)
 zephyr_compile_definitions(CFG_CONSOLE_HISTORY_DEPTH=${CONFIG_QORAAL_QSHELL_HISTORY_DEPTH})
 zephyr_compile_definitions(CFG_CONSOLE_HISTORY_LEN=${CONFIG_QORAAL_QSHELL_HISTORY_LEN})
