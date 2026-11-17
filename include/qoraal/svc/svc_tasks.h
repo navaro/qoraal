@@ -160,6 +160,21 @@ typedef struct SVC_WAITABLE_TASKS_S {
 #define _SVC_WAITABLE_TASKS_DATA()    {{0,0,SERVICE_STATUS_COMPLETE,0,0,0,0,0}, {0}}
 #define SVC_WAITABLE_TASKS_DECL(name)   SVC_WAITABLE_TASKS_T name =  _SVC_WAITABLE_TASKS_DATA()
 
+/**
+ * Statistics of one queue, read with svc_tasks_stats() when
+ * CFG_SVC_TASKS_STATS_ENABLE is defined. Times are in ticks. An overrun is a
+ * callback that ran longer than a quarter of the queue's watchdog timeout.
+ * The wait is the time from when a task was due to the start of its callback.
+ */
+typedef struct SVC_TASKS_STATS_S {
+    uint32_t        queued ;        /* tasks queued since start or reset */
+    uint32_t        depth ;         /* tasks waiting in the queue now */
+    uint32_t        max_depth ;     /* most tasks waiting at once */
+    uint32_t        overruns ;      /* callbacks that ran too long */
+    uint32_t        max_run ;       /* longest callback */
+    uint32_t        max_wait ;      /* longest wait */
+} SVC_TASKS_STATS_T ;
+
 
 /*===========================================================================*/
 /* External declarations.                                                    */
@@ -196,6 +211,9 @@ extern "C" {
     uint32_t        svc_task_next_expire (void) ;
 
     int32_t         svc_tasks_wait_queue (uint32_t queue, uint32_t timeout) ;
+
+    int32_t         svc_tasks_stats (uint32_t queue, SVC_TASKS_STATS_T * stats) ;
+    void            svc_tasks_stats_reset (void) ;
 
 #ifdef __cplusplus
 }

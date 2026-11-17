@@ -38,6 +38,15 @@ config QORAAL_SVC_THREADS_IDLE_PRIO
       of finished threads, such as web server workers, pile up in the heap.
       Set it to the level of the service that creates those threads.
 
+config QORAAL_SVC_TASKS_STATS
+    bool "Keep svc_tasks queue statistics"
+    default n
+    help
+      Count, for each svc_tasks queue, the tasks queued, the most waiting
+      at once, callbacks that run longer than a quarter of the queue's
+      watchdog timeout, and the longest run and wait. The shell command
+      "tasks" shows them and "tasks reset" clears them.
+
 config QORAAL_QFS
     bool "Enable Qoraal file system"
     default y
