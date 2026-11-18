@@ -166,6 +166,15 @@ typedef struct SVC_MESSAGE_CHANNEL_S {
     void                         *user;
 } SVC_MESSAGE_CHANNEL_T;
 
+/* Where svc_message_channel_add_prio() puts a channel. Each message goes to
+ * the channels in list order, so a high channel gets it before every low
+ * one: a channel that stores messages registers high, so that a low channel
+ * which passes a message on finds it stored already. */
+typedef enum {
+    SVC_MESSAGE_CHANNEL_LOW = 0,    /* added at the back of the list */
+    SVC_MESSAGE_CHANNEL_HIGH        /* added at the front of the list */
+} SVC_MESSAGE_CHANNEL_PRIO_T;
+
 struct SVC_MESSAGE_S {
     SVC_TASKS_T task;
 
@@ -227,7 +236,10 @@ extern SVC_MESSAGE_T *svc_message_create(
 
 extern int32_t svc_message_post(SVC_MESSAGE_T *message);
 
+/* Adds a low channel. */
 extern void svc_message_channel_add(SVC_MESSAGE_CHANNEL_T *channel);
+extern void svc_message_channel_add_prio(SVC_MESSAGE_CHANNEL_T *channel,
+                                         SVC_MESSAGE_CHANNEL_PRIO_T prio);
 extern void svc_message_channel_remove(SVC_MESSAGE_CHANNEL_T *channel);
 
 extern int32_t svc_message_wait(uint32_t timeout);
