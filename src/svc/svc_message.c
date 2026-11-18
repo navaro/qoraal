@@ -202,8 +202,24 @@ svc_message_post(SVC_MESSAGE_T *message)
 void
 svc_message_channel_add(SVC_MESSAGE_CHANNEL_T *channel)
 {
+    svc_message_channel_add_prio(channel, SVC_MESSAGE_CHANNEL_LOW);
+}
+
+/**
+ * @brief   Add a channel at the front (high) or the back (low) of the list.
+ * @details A message being delivered keeps its place in the walk, so a
+ *          channel added meanwhile gets the next message, not this one.
+ */
+void
+svc_message_channel_add_prio(SVC_MESSAGE_CHANNEL_T *channel,
+                             SVC_MESSAGE_CHANNEL_PRIO_T prio)
+{
     os_mutex_lock(&_message_mutex);
-    linked_add_tail(&_message_channels, channel, OFFSETOF(SVC_MESSAGE_CHANNEL_T, next));
+    if (prio == SVC_MESSAGE_CHANNEL_HIGH) {
+        linked_add_head(&_message_channels, channel, OFFSETOF(SVC_MESSAGE_CHANNEL_T, next));
+    } else {
+        linked_add_tail(&_message_channels, channel, OFFSETOF(SVC_MESSAGE_CHANNEL_T, next));
+    }
     os_mutex_unlock(&_message_mutex);
 }
 
